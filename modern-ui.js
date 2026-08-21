@@ -1,20 +1,21 @@
 (()=>{
-const style=`:root{--wb-green:#63c96b;--wb-blue:#4da3ff;--wb-blue2:#9ed0ff;--wb-dark:#080b09;--wb-line:#2c3b2e}body{background:radial-gradient(800px 400px at 50% -120px,#315b3455,transparent 70%),var(--wb-dark)!important}.mark{background:linear-gradient(145deg,#b9f2b2 0,#70cf76 35%,#3d8f46 70%,#245b2b 100%)!important;color:#061007!important;border:1px solid #8ee28c!important;box-shadow:0 0 24px #63c96b55,inset 0 1px #ffffff66!important}.brand{color:#eaffea!important}.wb-top-cats,.wb-mobile-bottom{display:none!important}
-#startup .space{background:radial-gradient(circle at 50% 50%,#2377d52b 0,#10294a22 28%,#020711 68%)!important}
-#startup .stars{background-image:radial-gradient(circle,#fff 1px,transparent 1.7px),radial-gradient(circle,#8fc9ff 1px,transparent 1.7px)!important}
-#startup .pulse{border-color:#4da3ff35!important;box-shadow:0 0 120px #4da3ff20 inset!important}
-#startup .orbit{border-color:#9ed0ff55!important}#startup .orbit.o2{border-color:#4da3ff35!important}#startup .orbit.o3{border-color:#9ed0ff18!important}
-#startup .orbit i{background:#e5f3ff!important;box-shadow:0 0 25px 7px #4da3ff!important}
-#startup .vault{background:linear-gradient(145deg,#dff1ff 0,#7dc1ff 27%,#3186d9 58%,#17477e 100%)!important;box-shadow:0 0 55px #4da3ff99,0 0 180px #2d82e533,0 35px 100px #000!important}
-#startup .vmark{color:#fff!important;text-shadow:0 4px 30px #17477e!important}
-#startup .vault:after{box-shadow:0 0 28px 10px #8dccff!important}
-#startup .shard{background:linear-gradient(#fff,#4da3ff)!important;box-shadow:0 0 15px #4da3ff!important}
-#startup .shock{border-color:#9ed0ff!important}
-#startup .start-name{color:#eaf5ff!important}#startup .start-sub{color:#a9c9e8!important}
-#startup .progress{background:#17283a!important}.progress i,#startup .progress i{background:linear-gradient(90deg,#1769b0,#dff1ff,#4da3ff,#1769b0)!important;background-size:220% 100%!important}
-#startup .sound-btn{border-color:#315b86!important;background:#0b1a2bdd!important;color:#dceeff!important}
+const style=`:root{--wb-green:#63c96b;--wb-green2:#b9f5ae;--wb-dark:#050905}.mark{background:linear-gradient(145deg,#d8ffd1,#7ee57a 35%,#3f9d48 68%,#174d21)!important;color:#061007!important;border:2px solid #9bf397!important;box-shadow:0 0 22px #63c96b88,0 0 55px #63c96b44,inset 0 2px #fff8!important}.brand{color:#eaffea!important}.wb-top-cats,.wb-mobile-bottom{display:none!important}
+#startup .space{background:radial-gradient(circle at 50% 45%,#63c96b22 0,#173b1b18 25%,#020602 70%)!important}
+#startup .stars{background-image:radial-gradient(circle,#eaffea 1px,transparent 1.8px),radial-gradient(circle,#63c96b 1px,transparent 1.8px),radial-gradient(circle,#b9f5ae 1px,transparent 1.6px)!important;background-size:37px 37px,61px 61px,83px 83px!important;animation:wbStars 7s linear infinite!important}
+#startup .pulse{border:1px solid #63c96b55!important;box-shadow:0 0 80px #63c96b25 inset,0 0 80px #63c96b18!important;animation:wbPulse 2.2s ease-in-out infinite!important}
+#startup .orbit{border-color:#b9f5ae88!important;animation:wbSpin 8s linear infinite!important}#startup .orbit.o2{border-color:#63c96b66!important;animation:wbSpinR 5s linear infinite!important}#startup .orbit.o3{border-color:#63c96b33!important;animation:wbSpin 12s linear infinite!important}
+#startup .orbit i{background:#edffeb!important;box-shadow:0 0 22px 6px #63c96b,0 0 55px 12px #63c96b66!important}
+#startup .vault{background:linear-gradient(145deg,#dfffd9 0,#91ef8a 22%,#4fbd59 50%,#277b32 76%,#103d18 100%)!important;box-shadow:0 0 35px #b9f5aeaa,0 0 90px #63c96b88,0 0 190px #63c96b44,0 35px 100px #000!important;animation:wbVault 2.4s ease-in-out infinite!important}
+#startup .vmark{color:#f2fff0!important;text-shadow:0 0 12px #fff,0 0 30px #63c96b,0 6px 35px #174d21!important;animation:wbLogo 2s ease-in-out infinite!important}
+#startup .vault:after{box-shadow:0 0 18px 6px #eaffea,0 0 45px 12px #63c96b!important;animation:wbRing 1.6s ease-out infinite!important}
+#startup .shard{background:linear-gradient(135deg,#fff,#b9f5ae,#3fae49)!important;box-shadow:0 0 12px #63c96b,0 0 28px #63c96b88!important;animation:wbShard 2s ease-in-out infinite!important}
+#startup .shock{border-color:#b9f5ae!important;box-shadow:0 0 35px #63c96b55!important;animation:wbShock 2.8s ease-out infinite!important}
+#startup .start-name{color:#efffec!important;text-shadow:0 0 20px #63c96b99!important}#startup .start-sub{color:#a9e8a4!important}
+#startup .progress{background:#102513!important;box-shadow:inset 0 0 10px #000!important}.progress i,#startup .progress i{background:linear-gradient(90deg,#1d6d27,#b9f5ae,#63c96b,#dfffd9,#1d6d27)!important;background-size:300% 100%!important;animation:wbProgress 1.2s linear infinite!important;box-shadow:0 0 16px #63c96b!important}
+#startup .sound-btn{border-color:#4f8d55!important;background:#081208dd!important;color:#eaffea!important;box-shadow:0 0 18px #63c96b33!important}
+@keyframes wbStars{to{background-position:37px 74px,-61px 61px,83px -83px}}@keyframes wbPulse{0%,100%{transform:scale(.96);opacity:.55}50%{transform:scale(1.04);opacity:1}}@keyframes wbSpin{to{transform:rotate(360deg)}}@keyframes wbSpinR{to{transform:rotate(-360deg)}}@keyframes wbVault{0%,100%{transform:scale(.94) rotate(0);filter:brightness(.9)}50%{transform:scale(1.06) rotate(1deg);filter:brightness(1.25)}}@keyframes wbLogo{0%,100%{transform:scale(.94);opacity:.88}50%{transform:scale(1.08);opacity:1}}@keyframes wbRing{0%{transform:scale(.7);opacity:0}35%{opacity:1}100%{transform:scale(1.7);opacity:0}}@keyframes wbShard{0%,100%{transform:translateY(8px) rotate(0) scale(.8);opacity:.3}50%{transform:translateY(-18px) rotate(180deg) scale(1.2);opacity:1}}@keyframes wbShock{0%{transform:scale(.7);opacity:0}25%{opacity:1}100%{transform:scale(1.5);opacity:0}}@keyframes wbProgress{to{background-position:300% 0}}
 `;
-function addStyle(){if(document.getElementById('wb-blue-startup'))return;const s=document.createElement('style');s.id='wb-blue-startup';s.textContent=style;document.head.appendChild(s)}
+function addStyle(){if(document.getElementById('wb-extreme-green'))return;const s=document.createElement('style');s.id='wb-extreme-green';s.textContent=style;document.head.appendChild(s)}
 function init(){addStyle()}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
