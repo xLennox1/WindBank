@@ -62,4 +62,5 @@ function toggleReview(i){reviews[i].verified=!reviews[i].verified;save();render(
 function logoutAdmin(){adminToken='';sessionStorage.removeItem('wb_admin_token');closeAdmin()}
 function toast(t){const e=document.getElementById('toast');e.textContent=t;e.classList.add('show');setTimeout(()=>e.classList.remove('show'),2600)}
 window.addEventListener('load',()=>setTimeout(()=>document.getElementById('startup').classList.add('hide'),2500));render();
-</script></body></html>
+</script><script src="/supabase-live.js" defer></script>
+</body></html>
