@@ -141,6 +141,17 @@ footer{border-top:1px solid var(--line);padding:25px 0;color:var(--muted);font-s
 })();
 </script>
 <script>
+(()=>{
+  const btn=document.getElementById('startupSound');
+  let ctx;
+  function tone(freq,start,duration,type='sine',gain=.035){
+    if(!ctx)return;const o=ctx.createOscillator(),g=ctx.createGain();o.type=type;o.frequency.setValueAtTime(freq,start);o.frequency.exponentialRampToValueAtTime(freq*1.8,start+duration);g.gain.setValueAtTime(.0001,start);g.gain.exponentialRampToValueAtTime(gain,start+.03);g.gain.exponentialRampToValueAtTime(.0001,start+duration);o.connect(g).connect(ctx.destination);o.start(start);o.stop(start+duration+.02)
+  }
+  btn?.addEventListener('click',()=>{ctx=ctx||new (window.AudioContext||window.webkitAudioContext)();ctx.resume();const t=ctx.currentTime;tone(90,t,.45,'sine',.06);tone(180,t+.35,.55,'triangle',.04);tone(360,t+.7,.7,'sine',.025);btn.textContent='✓ Sound aktiviert';setTimeout(()=>document.getElementById('startup')?.classList.add('hide'),900)});
+  window.addEventListener('load',()=>setTimeout(()=>document.getElementById('startup')?.classList.add('hide'),4200));
+})();
+</script>
+<script>
 const DEFAULT_ITEMS=[
 {id:'ancient',name:'Ancient Debris',type:'item',price:250000,stock:32,img:'https://raw.githubusercontent.com/Faithful-Pack/Default-Java/1.21.8/assets/minecraft/textures/block/ancient_debris.png'},
 {id:'gilded',name:'Gilded Blackstone',type:'item',price:75000,stock:64,img:'https://raw.githubusercontent.com/Faithful-Pack/Default-Java/1.21.8/assets/minecraft/textures/block/gilded_blackstone.png'},
