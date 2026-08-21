@@ -15,4 +15,42 @@ async function wbReviewAction(id,action){try{const apiAction=action==='approve'?
 async function wbNewMain(){const name=prompt('Item-Name:');if(!name)return;const price=Number(prompt('Preis in $:','250000'));const stock=Number(prompt('Stock:','32'));const image_url=prompt('Bild-URL (optional):','');try{await wbAdminRequest({action:'createMain',name,price,stock,image_url,description:''});toast('✓ Hauptangebot hinzugefügt.');await wbLoad();await wbRefreshAdmin()}catch(e){toast(e.message)}}
 async function wbEditMain(id,name,price,stock,image){const n=prompt('Item-Name:',name);if(!n)return;const p=Number(prompt('Preis in $:',price));const s=Number(prompt('Stock:',stock));const im=prompt('Bild-URL:',image||'');try{await wbAdminRequest({action:'updateMain',id,name:n,price:p,stock:s,image_url:im});toast('✓ Shop-Angebot aktualisiert.');await wbLoad();await wbRefreshAdmin()}catch(e){toast(e.message)}}
 function wbInstallAdmin(){if(typeof showAdmin!=='function'||window._wbWrapped)return;window._wbWrapped=true;const original=showAdmin;window.showAdmin=async function(){original();setTimeout(()=>wbRefreshAdmin().catch(e=>toast(e.message)),80)}}
-document.addEventListener('DOMContentLoaded',()=>{setTimeout(wbLoad,400);setTimeout(wbInstallAdmin,700);setInterval(wbLoad,30000)});
+
+/* Basis-Versicherung: eigenständiger Bereich, ohne den bestehenden Shop umzubauen. */
+function wbInstallBaseInsurance(){
+ if(document.getElementById('wb-base-insurance'))return;
+ const nav=document.querySelector('.links');
+ if(nav){const a=document.createElement('a');a.href='#basis-versicherung';a.textContent='Basis-Versicherung';nav.appendChild(a)}
+ const host=document.querySelector('main')||document.body;
+ const section=document.createElement('section');section.id='wb-base-insurance';section.className='section';section.innerHTML=`
+ <div class="wrap">
+  <div class="section-head"><div><div class="eyebrow">WindBank Schutz</div><h2 id="basis-versicherung">Versicherung von Basen</h2><div class="section-sub">Schütze deine Basis auf dem Wind SMP gegen definierte Schadensfälle.</div></div><span class="pill">Ingame-Service</span></div>
+  <div class="loan" style="grid-template-columns:1.15fr .85fr">
+   <div class="loan-card">
+    <h3>Wähle deinen Basen-Schutz</h3>
+    <p>Die Prämie richtet sich nach dem geschätzten Wert deiner Basis. Du kannst die Konditionen vor dem Antrag direkt berechnen.</p>
+    <div class="grid" style="grid-template-columns:repeat(3,1fr);margin-top:18px">
+      <div class="card"><div class="body"><span class="pill">BASIC</span><div class="title" style="margin-top:10px">Basis-Schutz</div><div class="meta">Für kleinere Basen</div><div class="price">2%</div><div class="meta">des Basiswerts / Woche</div></div></div>
+      <div class="card"><div class="body"><span class="pill">PLUS</span><div class="title" style="margin-top:10px">Plus-Schutz</div><div class="meta">Mehr Schutzumfang</div><div class="price">3,5%</div><div class="meta">des Basiswerts / Woche</div></div></div>
+      <div class="card"><div class="body"><span class="pill">PREMIUM</span><div class="title" style="margin-top:10px">Premium-Schutz</div><div class="meta">Maximaler Ingame-Schutz</div><div class="price">5%</div><div class="meta">des Basiswerts / Woche</div></div></div>
+    </div>
+    <p class="listing-note">Wichtig: Diese Versicherung gilt ausschließlich innerhalb des WindBank/Wind-SMP-Systems und ersetzt keine echte Versicherung.</p>
+   </div>
+   <div class="loan-card">
+    <h3>Beitrag berechnen</h3>
+    <div class="field"><label>Spielername</label><input id="wbInsOwner" placeholder="z. B. Lennox"></div>
+    <div class="field" style="margin-top:10px"><label>Name der Basis</label><input id="wbInsBase" placeholder="z. B. Spawn Base"></div>
+    <div class="field" style="margin-top:10px"><label>Geschätzter Basiswert ($)</label><input id="wbInsValue" type="number" min="1" value="100000" oninput="wbCalcInsurance()"></div>
+    <div class="field" style="margin-top:10px"><label>Tarif</label><select id="wbInsPlan" onchange="wbCalcInsurance()"><option value="0.02">Basis-Schutz — 2%</option><option value="0.035">Plus-Schutz — 3,5%</option><option value="0.05">Premium-Schutz — 5%</option></select></div>
+    <div style="margin-top:18px;padding:15px;border:1px solid var(--line);border-radius:13px;background:#0b0d12"><div class="meta">Wöchentlicher Beitrag</div><div class="rate" id="wbInsPrice">$2.000</div></div>
+    <button class="btn primary" style="width:100%;margin-top:12px" onclick="wbSubmitInsurance()">Versicherung anfragen</button>
+    <div class="listing-note" id="wbInsStatus">Der Antrag wird zunächst auf diesem Gerät gespeichert.</div>
+   </div>
+  </div>
+ </div>`;
+ const reviews=document.querySelector('#reviews');
+ if(reviews&&reviews.parentNode)reviews.parentNode.insertBefore(section,reviews);else host.appendChild(section);
+}
+function wbCalcInsurance(){const value=Math.max(0,Number(document.getElementById('wbInsValue')?.value||0));const rate=Number(document.getElementById('wbInsPlan')?.value||.02);const el=document.getElementById('wbInsPrice');if(el)el.textContent='$'+Math.round(value*rate).toLocaleString('de-DE')}
+function wbSubmitInsurance(){const owner=document.getElementById('wbInsOwner')?.value.trim(),base=document.getElementById('wbInsBase')?.value.trim(),value=Math.max(0,Number(document.getElementById('wbInsValue')?.value||0)),plan=document.getElementById('wbInsPlan')?.value;if(!owner||!base||value<1)return toast('Bitte Spielername, Basisname und Basiswert ausfüllen.');const req={id:'ins_'+Date.now(),owner,base,value,rate:Number(plan),createdAt:new Date().toISOString(),status:'pending'};const old=JSON.parse(localStorage.getItem('wb_base_insurance_requests')||'[]');old.push(req);localStorage.setItem('wb_base_insurance_requests',JSON.stringify(old));document.getElementById('wbInsStatus').textContent='✓ Anfrage gespeichert. WindBank kann sie anschließend prüfen.';toast('✓ Versicherungsanfrage gespeichert.');}
+document.addEventListener('DOMContentLoaded',()=>{setTimeout(wbLoad,400);setTimeout(wbInstallAdmin,700);setTimeout(wbInstallBaseInsurance,800);setInterval(wbLoad,30000)});
