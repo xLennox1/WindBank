@@ -6,5 +6,13 @@ function startup(){if(document.querySelector('.wb-green-startup'))return;const o
 function existing(){document.querySelectorAll('.loading-screen,.loader-screen,.splash-screen,#loading,#loader').forEach(e=>{e.style.display='none';e.remove()})}
 function nav(){if(document.querySelector('.wb-main-nav'))return;const n=document.createElement('nav');n.className='wb-main-nav';[['🛒','Shop','#shop'],['💰','Kredit','#kredit'],['⭐','Reviews','#reviews'],['👥','Staff',null]].forEach(([i,l,t])=>{const b=document.createElement('button');b.textContent=`${i} ${l}`;b.onclick=()=>l==='Staff'?window.showAdmin?.():document.querySelector(t)?.scrollIntoView({behavior:'smooth'});n.appendChild(b)});const h=document.querySelector('header,.topbar,.navbar,.site-header');h?h.insertAdjacentElement('afterend',n):document.body.prepend(n)}
 function staff(){document.querySelectorAll('.admin-btn').forEach(b=>{b.textContent='Staff';b.classList.add('wb-staff-header')})}
-function init(){style();existing();nav();staff();startup();setTimeout(existing,500)}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();})();
+function removeInsurance(){
+ document.querySelectorAll('#wb-base-insurance,[data-section="insurance"],[data-section="versicherung"]').forEach(e=>e.remove());
+ document.querySelectorAll('a,button').forEach(el=>{const t=(el.textContent||'').trim().toLowerCase();if(t.includes('versicherung')){const nav=el.closest('nav,.links,.tabs,.tabbar,.bottom-nav,.wb-bottom,.navigation,.navbar');if(nav)el.remove();else if(el.closest('section,article')){const sec=el.closest('section,article');if(/versicherung|basen-schutz|basis-schutz/i.test(sec.textContent||''))sec.remove()}}});
+ document.querySelectorAll('section,article').forEach(el=>{const t=el.textContent||'';if(/versicherung von basen|wähle deinen basen-schutz|basis-schutz.*2%/is.test(t))el.remove()});
+ document.querySelectorAll('.wb-bottom,.bottom-nav').forEach(nav=>{if(/versicherung/i.test(nav.textContent||'')){nav.querySelectorAll('a,button').forEach(el=>{if(/versicherung/i.test(el.textContent||''))el.remove()});}});
+}
+function init(){style();existing();removeInsurance();nav();staff();startup();setTimeout(()=>{existing();removeInsurance();staff()},500);setTimeout(removeInsurance,1500)}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+new MutationObserver(()=>removeInsurance()).observe(document.documentElement,{childList:true,subtree:true});
+})();
