@@ -1,11 +1,31 @@
-(()=>{
-const css=`.admin-btn{background:linear-gradient(180deg,#75dc7d,#3e9c47)!important;color:#061007!important;font-weight:900!important}.wb-staff-header{background:linear-gradient(180deg,#75dc7d,#3e9c47)!important;color:#061007!important;font-weight:900!important}#startup,.wb-green-startup{display:none!important}body.wb-admin-open .wb-main-nav,body.wb-admin-open .wb-bottom,body.wb-admin-open .bottom-nav,body.wb-admin-open header nav,body.wb-admin-open .navbar,body.wb-admin-open .navigation{display:none!important}`;
-function style(){if(document.getElementById('wb-clean-staff'))return;const s=document.createElement('style');s.id='wb-clean-staff';s.textContent=css;(document.head||document.documentElement).appendChild(s)}
-function removeLoaders(){document.querySelectorAll('#startup,.wb-green-startup,.loading-screen,.loader-screen,.splash-screen,#loading,#loader').forEach(e=>{e.style.display='none';e.remove()})}
-function staff(){document.querySelectorAll('.admin-btn').forEach(b=>{b.textContent='Staff';b.classList.add('wb-staff-header')})}
-function removeInsurance(){document.querySelectorAll('#wb-base-insurance,[data-section="insurance"],[data-section="versicherung"]').forEach(e=>e.remove());document.querySelectorAll('a,button').forEach(el=>{const t=(el.textContent||'').trim().toLowerCase();if(t.includes('versicherung')){const nav=el.closest('nav,.links,.tabs,.tabbar,.bottom-nav,.wb-bottom,.navigation,.navbar');if(nav)el.remove();else if(el.closest('section,article')){const sec=el.closest('section,article');if(/versicherung|basen-schutz|basis-schutz/i.test(sec.textContent||''))sec.remove()}}});document.querySelectorAll('section,article').forEach(el=>{const t=el.textContent||'';if(/versicherung von basen|wähle deinen basen-schutz|basis-schutz.*2%/is.test(t))el.remove()});document.querySelectorAll('.wb-bottom,.bottom-nav').forEach(nav=>nav.querySelectorAll('a,button').forEach(el=>{if(/versicherung/i.test(el.textContent||''))el.remove()}))}
-function adminState(){let open=false;document.querySelectorAll('body *').forEach(el=>{if(open||el.children.length>8)return;const t=(el.textContent||'').trim();if(t==='Admin Panel'||(t.startsWith('Admin Panel')&&t.length<300)){const s=getComputedStyle(el),r=el.getBoundingClientRect();open=s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0}});document.body.classList.toggle('wb-admin-open',open)}
-function init(){style();removeLoaders();removeInsurance();staff();adminState();setTimeout(()=>{removeLoaders();removeInsurance();staff();adminState()},100);setTimeout(()=>{removeLoaders();removeInsurance();staff();adminState()},1000)}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
-new MutationObserver(()=>{removeLoaders();removeInsurance();staff();adminState()}).observe(document.documentElement,{childList:true,subtree:true});
+(function(){
+  // WindBank cleanup: this script intentionally runs synchronously at the end of index.html.
+  var style=document.createElement('style');
+  style.id='wb-cleanup-style';
+  style.textContent='#startup{display:none!important;opacity:0!important;visibility:hidden!important;pointer-events:none!important}.wb-green-startup{display:none!important}';
+  document.head.appendChild(style);
+
+  var startup=document.getElementById('startup');
+  if(startup) startup.remove();
+  document.querySelectorAll('.wb-green-startup,.loading-screen,.loader-screen,.splash-screen,#loading,#loader').forEach(function(el){el.remove();});
+
+  // Remove the old insurance UI wherever it is injected.
+  document.querySelectorAll('section,article').forEach(function(el){
+    var text=(el.textContent||'');
+    if(/versicherung von basen|wähle deinen basen-schutz|basis-schutz.*2%/is.test(text)) el.remove();
+  });
+  document.querySelectorAll('a,button').forEach(function(el){
+    if(/versicherung/i.test((el.textContent||''))){
+      var nav=el.closest('nav,.links,.tabs,.tabbar,.bottom-nav,.wb-bottom,.navigation,.navbar');
+      if(nav) el.remove();
+    }
+  });
+
+  // Keep the Staff button green.
+  document.querySelectorAll('.admin-btn').forEach(function(btn){
+    btn.textContent='Staff';
+    btn.style.background='linear-gradient(180deg,#75dc7d,#3e9c47)';
+    btn.style.color='#061007';
+    btn.style.fontWeight='900';
+  });
 })();
