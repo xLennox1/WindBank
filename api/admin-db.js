@@ -8,7 +8,7 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
  }
  if(req.method!=='POST')return res.status(405).json({ok:false,error:'Method not allowed'});const {action}=req.body||{};
  if(action==='approve'||action==='reject'){const status=action==='approve'?'approved':'rejected';await sb('listings?id=eq.'+encodeURIComponent(req.body.id),{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status})});return res.status(200).json({ok:true});}
- if(action==='delete'||action==='listingDelete'){await sb('listings?id=eq.'+encodeURIComponent(req.body.id),{method:'DELETE',headers:{Prefer:'return=minimal'}});return res.status(200).json({ok:true});}
+ if(action==='delete'||action==='listingDelete'||action==='deletePlayer'){await sb('listings?id=eq.'+encodeURIComponent(req.body.id),{method:'DELETE',headers:{Prefer:'return=minimal'}});return res.status(200).json({ok:true});}
  if(action==='clearMain'){await sb('listings?seller=eq.WindBank',{method:'DELETE',headers:{Prefer:'return=minimal'}});return res.status(200).json({ok:true});}
  if(action==='reviewApprove'||action==='reviewReject'){const status=action==='reviewApprove'?'approved':'rejected';await sb('reviews?id=eq.'+encodeURIComponent(req.body.id),{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status})});return res.status(200).json({ok:true});}
  if(action==='reviewDelete'){await sb('reviews?id=eq.'+encodeURIComponent(req.body.id),{method:'DELETE',headers:{Prefer:'return=minimal'}});return res.status(200).json({ok:true});}
