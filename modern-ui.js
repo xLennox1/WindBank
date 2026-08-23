@@ -47,8 +47,42 @@
   function cleanupLegacy(){
     document.querySelectorAll('a,button').forEach(function(el){if(/versicherung von basen|basen-schutz|windbank schutz/i.test(el.textContent||'')){var nav=el.closest('nav,.links,.tabs,.tabbar,.bottom-nav,.wb-bottom,.navigation,.navbar');if(nav)el.remove()}})
   }
-  function run(){css();startup();fixTopNav();fixMarketplaceTabs();fixAdmin();cleanupLegacy()}
+  function fixStartupSound(){
+    var btn=document.getElementById('startupSound');
+    if(!btn||btn.dataset.wbSoundFixed==='1')return;
+    btn.dataset.wbSoundFixed='1';
+    /* Replace the button node so any duplicated legacy click handlers are removed. */
+    var clean=btn.cloneNode(true);
+    btn.replaceWith(clean);
+    clean.addEventListener('click',function(){
+      var AudioCtx=window.AudioContext||window.webkitAudioContext;
+      if(!AudioCtx){clean.textContent='✓ Sound nicht verfügbar';return}
+      var ctx=new AudioCtx();
+      if(ctx.resume)ctx.resume();
+      var t=ctx.currentTime;
+      function tone(freq,start,duration,type,gain){
+        var o=ctx.createOscillator(),g=ctx.createGain();
+        o.type=type||'sine';
+        o.frequency.setValueAtTime(freq,start);
+        o.frequency.exponentialRampToValueAtTime(Math.max(1,freq*1.8),start+duration);
+        g.gain.setValueAtTime(.0001,start);
+        g.gain.exponentialRampToValueAtTime(gain||.035,start+.03);
+        g.gain.exponentialRampToValueAtTime(.0001,start+duration);
+        o.connect(g).connect(ctx.destination);
+        o.start(start);o.stop(start+duration+.02);
+      }
+      tone(90,t,.45,'sine',.06);
+      tone(180,t+.35,.55,'triangle',.04);
+      tone(360,t+.7,.7,'sine',.025);
+      clean.textContent='✓ Sound aktiviert';
+      var el=document.getElementById('startup');
+      if(window.__wbStartupTimer)clearTimeout(window.__wbStartupTimer);
+      setTimeout(function(){if(el){el.classList.add('wb-start-hide');setTimeout(function(){el.classList.add('hide')},950)}},900);
+      setTimeout(function(){try{ctx.close()}catch(e){}},1600);
+    });
+  }
+  function run(){css();startup();fixTopNav();fixMarketplaceTabs();fixAdmin();cleanupLegacy();fixStartupSound()}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run);else run();
   window.addEventListener('load',run);[150,500,1200,2500].forEach(function(ms){setTimeout(run,ms)});
-  if(window.MutationObserver&&document.documentElement){var last=0;new MutationObserver(function(){var now=Date.now();if(now-last<100)return;last=now;fixTopNav();fixMarketplaceTabs();fixAdmin();cleanupLegacy()}).observe(document.documentElement,{childList:true,subtree:true})}
+  if(window.MutationObserver&&document.documentElement){var last=0;new MutationObserver(function(){var now=Date.now();if(now-last<100)return;last=now;fixTopNav();fixMarketplaceTabs();fixAdmin();cleanupLegacy();fixStartupSound()}).observe(document.documentElement,{childList:true,subtree:true})}
 })();
