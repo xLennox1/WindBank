@@ -64,29 +64,17 @@ footer{border-top:1px solid var(--line);padding:25px 0;color:var(--muted);font-s
 <footer><div class="wrap">© 2026 WindBank · Wind SMP Marketplace · Angebote und Rezensionen können moderiert werden.</div></footer>
 <div class="modal" id="adminModal"><div class="modal-card" id="adminContent"></div></div><div class="toast" id="toast"></div>
 <script>
-(()=>{
-  const btn=document.getElementById('startupSound');
-  let ctx;
-  function tone(freq,start,duration,type='sine',gain=.035){
-    if(!ctx)return;const o=ctx.createOscillator(),g=ctx.createGain();o.type=type;o.frequency.setValueAtTime(freq,start);o.frequency.exponentialRampToValueAtTime(freq*1.8,start+duration);g.gain.setValueAtTime(.0001,start);g.gain.exponentialRampToValueAtTime(gain,start+.03);g.gain.exponentialRampToValueAtTime(.0001,start+duration);o.connect(g).connect(ctx.destination);o.start(start);o.stop(start+duration+.02)
-  }
-  btn?.addEventListener('click',()=>{ctx=ctx||new (window.AudioContext||window.webkitAudioContext)();ctx.resume();const t=ctx.currentTime;tone(90,t,.45,'sine',.06);tone(180,t+.35,.55,'triangle',.04);tone(360,t+.7,.7,'sine',.025);btn.textContent='✓ Sound aktiviert';setTimeout(()=>document.getElementById('startup')?.classList.add('hide'),900)});
-  window.addEventListener('load',()=>setTimeout(()=>document.getElementById('startup')?.classList.add('hide'),4200));
-})();
-</script>
-<script>
 const DEFAULT_ITEMS=[
-{id:'ancient',name:'Ancient Debris',type:'item',price:250000,stock:32,img:'https://raw.githubusercontent.com/Faithful-Pack/Default-Java/1.21.8/assets/minecraft/textures/block/ancient_debris.png'},
-{id:'gilded',name:'Gilded Blackstone',type:'item',price:75000,stock:64,img:'https://raw.githubusercontent.com/Faithful-Pack/Default-Java/1.21.8/assets/minecraft/textures/block/gilded_blackstone.png'},
-{id:'diamond',name:'Diamant',type:'item',price:12000,stock:128,img:'https://raw.githubusercontent.com/Faithful-Pack/Default-Java/1.21.8/assets/minecraft/textures/item/diamond.png'},
-{id:'netherite',name:'Netherite Ingot',type:'item',price:90000,stock:24,img:'https://raw.githubusercontent.com/Faithful-Pack/Default-Java/1.21.8/assets/minecraft/textures/item/netherite_ingot.png'},
-{id:'elytra',name:'Elytra',type:'item',price:450000,stock:3,img:'https://raw.githubusercontent.com/Faithful-Pack/Default-Java/1.21.8/assets/minecraft/textures/item/elytra.png'},
-{id:'beacon',name:'Beacon',type:'item',price:180000,stock:7,img:'https://raw.githubusercontent.com/Faithful-Pack/Default-Java/1.21.8/assets/minecraft/textures/item/beacon.png'}
+{id:'d1',name:'Netherite Ingots',type:'item',price:250000,stock:16,img:'https://static.wikia.nocookie.net/minecraft_gamepedia/images/8/87/Netherite_Ingot_JE2_BE2.png'},
+{id:'d2',name:'Diamanten',type:'item',price:12000,stock:48,img:'https://static.wikia.nocookie.net/minecraft_gamepedia/images/1/1b/Diamond_JE3_BE3.png'},
+{id:'d3',name:'Elytra',type:'item',price:180000,stock:3,img:'https://static.wikia.nocookie.net/minecraft_gamepedia/images/4/41/Elytra_JE2_BE2.png'},
+{id:'d4',name:'Shulker Box',type:'item',price:35000,stock:8,img:'https://static.wikia.nocookie.net/minecraft_gamepedia/images/4/4f/Shulker_Box_JE2_BE2.png'},
+{id:'d5',name:'Kredit — 1.000.000 $',type:'kredit',price:150000,stock:1,img:''}
 ];
 const DEFAULT_REVIEWS=[
-{name:'Lennox',stars:5,text:'Schneller Handel und faire Preise. Die Abwicklung war unkompliziert.',verified:true},
-{name:'Steve',stars:5,text:'Mein Netherite-Kauf lief problemlos. Angebot war wie beschrieben.',verified:true},
-{name:'Alex',stars:4,text:'Guter Marktplatz für seltene Items auf dem Wind SMP.',verified:true}
+{name:'Lennox',stars:5,text:'Schneller Handel und faire Abwicklung. Genau so sollte ein SMP-Marktplatz funktionieren.',verified:true},
+{name:'Noah',stars:5,text:'Kredit lief unkompliziert. Konditionen waren vorher klar.',verified:true},
+{name:'Mika',stars:4,text:'Gute Preise und schnelle Antworten über Discord.',verified:true}
 ];
 let activeFilter='all';
 let items=JSON.parse(localStorage.getItem('wb_items')||'null')||DEFAULT_ITEMS;
@@ -102,11 +90,13 @@ function submitReview(){const name=document.getElementById('reviewName').value.t
 function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2600)}
 function openAdmin(){document.getElementById('adminContent').innerHTML=`<div class="modal-head"><h2>WindBank Admin</h2><button class="close" onclick="closeAdmin()">✕</button></div><div class="login"><p class="section-sub">Admin-Bereich</p><div class="field"><label>Passwort</label><input id="adminPass" type="password" placeholder="Passwort"></div><button class="btn primary" style="margin-top:12px;width:100%" onclick="adminLogin()">Einloggen</button><div id="adminError"></div></div>`;document.getElementById('adminModal').classList.add('open')}
 function closeAdmin(){document.getElementById('adminModal').classList.remove('open')}
-function adminLogin(){if(document.getElementById('adminPass').value!=='windbank'){document.getElementById('adminError').innerHTML='<div class="error">Falsches Passwort.</div>';return}renderAdmin()}
+async function adminLogin(){const pass=document.getElementById('adminPass').value;const err=document.getElementById('adminError');const btn=document.querySelector('#adminContent .btn.primary');if(!pass){err.innerHTML='<div class="error">Bitte Passwort eingeben.</div>';return}if(btn)btn.disabled=true;err.innerHTML='';try{const res=await fetch('/api/admin-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pass}),cache:'no-store'});const data=await res.json().catch(()=>({}));if(!res.ok||!data.ok)throw new Error(data.error||'Falsches Passwort.');sessionStorage.setItem('wb_admin_token',data.token||'');renderAdmin()}catch(e){err.innerHTML=`<div class="error">${e.message||'Falsches Passwort.'}</div>`}finally{if(btn)btn.disabled=false}}
 function renderAdmin(){document.getElementById('adminContent').innerHTML=`<div class="modal-head"><h2>Admin</h2><button class="close" onclick="closeAdmin()">✕</button></div><div class="admin-grid"><h3>Angebote</h3>${items.map((x,i)=>`<div class="admin-item"><input value="${x.name}" onchange="items[${i}].name=this.value;save();render()"><input type="number" value="${x.price}" onchange="items[${i}].price=Number(this.value);save();render()"><button class="btn" onclick="items.splice(${i},1);save();renderAdmin();render()">Löschen</button></div>`).join('')}<h3>Ausstehend</h3>${pending.length?pending.map((p,i)=>`<div class="admin-item"><div><b>${p.kind==='review'?'Rezension':'Angebot'}</b><br>${p.name||p.item} ${p.seller?`· ${p.seller}`:''}</div><button class="btn primary" onclick="approve(${i})">Freigeben</button><button class="btn" onclick="pending.splice(${i},1);save();renderAdmin()">Ablehnen</button></div>`).join(''):'<div class="section-sub">Nichts ausstehend.</div>'}</div>`}
 function approve(i){const p=pending[i];if(p.kind==='review')reviews.push({name:p.name,stars:p.stars,text:p.text,verified:true});else items.push({id:'p'+Date.now(),name:p.name||p.item,type:'player',price:p.price,stock:p.stock,img:p.img,seller:p.seller});pending.splice(i,1);save();render();renderAdmin()}
 document.getElementById('adminModal').addEventListener('click',e=>{if(e.target.id==='adminModal')closeAdmin()});
 render();
 </script>
+<script src="modern-ui.js"></script>
+<script src="supabase-live.js"></script>
 </body>
 </html>
