@@ -63,3 +63,4 @@ for insert with check (status = 'pending');
 
 -- Admin writes must be performed server-side with the Supabase secret key.
 -- Never put the Supabase secret key into browser JavaScript.
+
