@@ -1,64 +1,498 @@
-(function(){
+/* =========================================================
+   WindBank — App
+   Ein Skript für Rendering, Live-Daten (Supabase) und Admin.
+   Kein Monkey-Patching, kein MutationObserver, keine Timer-Batterie —
+   ein klarer Ablauf: laden -> rendern -> auf Aktionen reagieren.
+   ========================================================= */
+(() => {
   'use strict';
-  var DISCORD='https://discord.gg/dD8rJR7h4A';
-  function css(){
-    if(document.getElementById('wb-modern-fix-style')) return;
-    var s=document.createElement('style');s.id='wb-modern-fix-style';s.textContent=`
-      #startup{display:grid!important;opacity:1;visibility:visible;pointer-events:auto;transition:opacity .65s ease,visibility .65s ease,transform .65s ease}
-      #startup.wb-start-hide{opacity:0!important;visibility:hidden!important;pointer-events:none!important;transform:scale(1.025)}
-      #startup .progress i{animation-duration:3.1s,.9s!important}
-      #startup .vault{animation:wbVault 1.35s cubic-bezier(.16,1,.3,1) both}
-      #startup .orbit{animation-duration:6s!important}.wb-create-form{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px;margin-bottom:14px;border:1px solid #285337;border-radius:14px;background:#081009}.wb-create-form .full{grid-column:1/-1}.wb-create-form input,.wb-create-form textarea{width:100%;background:#060c07;border:1px solid #24432b;color:#fff;border-radius:9px;padding:10px;outline:none}.wb-create-form textarea{min-height:72px;resize:vertical}.wb-create-actions{display:flex;gap:8px;justify-content:flex-end;grid-column:1/-1}@media(max-width:650px){.wb-create-form{grid-template-columns:1fr}.wb-create-form .full,.wb-create-actions{grid-column:auto}}
-      #adminModal.wb-admin-closing{display:grid!important;opacity:0;pointer-events:none;transition:opacity .28s ease}#adminModal.wb-admin-closing .modal-card{transform:translateY(12px) scale(.97);transition:transform .28s ease}#adminModal.wb-admin-ready{animation:wbAdminIn .3s ease both}@keyframes wbAdminIn{from{opacity:0;transform:scale(.98)}to{opacity:1;transform:scale(1)}}
-      .wb-discord-link{border:1px solid #5865f2!important;background:#15152a!important;color:#cfd3ff!important;font-weight:900!important}.wb-discord-link:hover{background:#5865f2!important;color:#fff!important}
-      .wb-buy-modal{position:fixed;inset:0;z-index:1000;background:#000b;display:none;place-items:center;padding:16px}
-      .wb-buy-modal.open{display:grid}
-      .wb-buy-card{width:min(480px,100%);background:#101218;border:1px solid #333744;border-radius:20px;padding:24px;box-shadow:0 24px 70px #000;animation:wbBuyIn .25s ease both}
-      .wb-buy-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
-      .wb-buy-head h2{margin:0;font-size:24px;letter-spacing:-.04em}
-      .wb-buy-close{border:1px solid #282c38;background:#171922;color:#fff;border-radius:9px;padding:7px 10px;cursor:pointer}
-      .wb-buy-info{margin:18px 0;color:#aeb3c1;line-height:1.6;font-size:13px}
-      .wb-buy-item{color:#fff;font-weight:900}
-      .wb-buy-actions{display:flex;gap:9px;flex-wrap:wrap}
-      .wb-buy-discord{display:inline-flex;align-items:center;justify-content:center;flex:1;min-width:180px;background:#5865f2;color:#fff;text-decoration:none;border-radius:10px;padding:12px 15px;font-weight:900}
-      .wb-buy-discord:hover{background:#4752c4}
-      .wb-buy-cancel{background:#171922;color:#fff;border:1px solid #282c38;border-radius:10px;padding:12px 15px;font-weight:800;cursor:pointer}
-      @keyframes wbBuyIn{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:none}}
-    `;(document.head||document.documentElement).appendChild(s);
+
+  // ---------- Konfiguration ----------
+  const DISCORD_URL = 'https://discord.gg/dD8rJR7h4A';
+  const SUPABASE_URL = 'https://laawaphkfqkshftiyqqy.supabase.co';
+  // Öffentlicher "publishable" Key: absichtlich clientseitig sichtbar,
+  // Zugriff wird ausschließlich über Row-Level-Security in Supabase begrenzt
+  // (siehe supabase/schema.sql). Schreibender Zugriff läuft über /api/*.
+  const SUPABASE_KEY = 'sb_publishable_jY73SSA6foPKJoQ2SFYEGQ_bBqMTReB';
+  const SUPABASE_HEADERS = {
+    apikey: SUPABASE_KEY,
+    Authorization: `Bearer ${SUPABASE_KEY}`,
+    'Content-Type': 'application/json'
+  };
+  const LOW_STOCK_THRESHOLD = 3;
+  const POLL_INTERVAL_MS = 30000;
+
+  const ICON_CLOSE = '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M5 5L15 15M15 5L5 15" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  const ICON_CHAT = '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 5.5C3 4.67 3.67 4 4.5 4h11c.83 0 1.5.67 1.5 1.5v6c0 .83-.67 1.5-1.5 1.5H9l-3.5 3v-3H4.5C3.67 13 3 12.33 3 11.5v-6Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>';
+
+  // ---------- Status ----------
+  let items = [];
+  let reviews = [];
+  let activeFilter = 'all';
+  let toastTimer = null;
+
+  const els = {};
+  const $ = (id) => document.getElementById(id);
+
+  // ---------- Helfer ----------
+  function esc(value){
+    return String(value ?? '').replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
   }
-  function hideStartup(){var el=document.getElementById('startup');if(!el)return;el.classList.add('wb-start-hide');setTimeout(function(){el.classList.add('hide')},700)}
-  function startup(){var el=document.getElementById('startup');if(!el||window.__wbStartupStarted)return;window.__wbStartupStarted=true;el.classList.remove('hide','wb-start-hide');window.__wbStartupTimer=setTimeout(hideStartup,4000)}
-  function fixTopNav(){var nav=document.querySelector('header .links');if(!nav)return;if(!nav.querySelector('.wb-discord-link')){var a=document.createElement('a');a.className='wb-discord-link';a.href=DISCORD;a.target='_blank';a.rel='noopener noreferrer';a.textContent='Discord';nav.appendChild(a)}}
-  function fixMarketplaceTabs(){var shop=document.getElementById('shop');if(!shop)return;var tabs=shop.querySelector('.tabs');if(!tabs)return;tabs.querySelectorAll('button').forEach(function(b){if((b.textContent||'').trim().toLowerCase()==='kredite')b.remove()})}
-  function fixAdmin(){var modal=document.getElementById('adminModal');if(!modal)return;if(!modal.dataset.wbBound){modal.dataset.wbBound='1';modal.addEventListener('click',function(e){if(e.target===modal&&typeof window.closeAdmin==='function')window.closeAdmin()})}if(!window.__wbCloseWrapped&&typeof window.closeAdmin==='function'){window.__wbCloseWrapped=true;var oldClose=window.closeAdmin;window.closeAdmin=function(){var m=document.getElementById('adminModal');if(!m)return;m.classList.add('wb-admin-closing');setTimeout(function(){m.classList.remove('open','wb-admin-closing','wb-admin-ready');m.style.display=''},300);return oldClose.apply(this,arguments)}}if(!window.__wbOpenWrapped&&typeof window.openAdmin==='function'){window.__wbOpenWrapped=true;var oldOpen=window.openAdmin;window.openAdmin=function(){var m=document.getElementById('adminModal');if(m){m.classList.remove('wb-admin-closing');m.classList.add('open','wb-admin-ready')}return oldOpen.apply(this,arguments)}}}
-  function cleanupLegacy(){document.querySelectorAll('a,button').forEach(function(el){if(/versicherung von basen|basen-schutz|windbank schutz/i.test(el.textContent||'')){var nav=el.closest('nav,.links,.tabs,.tabbar,.bottom-nav,.wb-bottom,.navigation,.navbar');if(nav)el.remove()}})}
-  function fixStartupSound(){var btn=document.getElementById('startupSound');if(!btn||btn.dataset.wbSoundFixed==='1')return;btn.dataset.wbSoundFixed='1';var clean=btn.cloneNode(true);btn.replaceWith(clean);clean.addEventListener('click',function(){var AudioCtx=window.AudioContext||window.webkitAudioContext;if(!AudioCtx){clean.textContent='✓ Sound nicht verfügbar';hideStartup();return}var ctx=new AudioCtx();if(ctx.resume)ctx.resume();var t=ctx.currentTime;function tone(freq,start,duration,type,gain){var o=ctx.createOscillator(),g=ctx.createGain();o.type=type||'sine';o.frequency.setValueAtTime(freq,start);o.frequency.exponentialRampToValueAtTime(Math.max(1,freq*1.8),start+duration);g.gain.setValueAtTime(.0001,start);g.gain.exponentialRampToValueAtTime(gain||.035,start+.03);g.gain.exponentialRampToValueAtTime(.0001,start+duration);o.connect(g).connect(ctx.destination);o.start(start);o.stop(start+duration+.02)}tone(90,t,.45,'sine',.06);tone(180,t+.35,.55,'triangle',.04);tone(360,t+.7,.7,'sine',.025);clean.textContent='✓ Sound aktiviert';if(window.__wbStartupTimer)clearTimeout(window.__wbStartupTimer);setTimeout(hideStartup,900);setTimeout(function(){try{ctx.close()}catch(e){}},1600)})}
-  function toastSafe(msg){if(typeof window.toast==='function')window.toast(msg);else{var t=document.getElementById('toast');if(t){t.textContent=msg;t.classList.add('show');setTimeout(function(){t.classList.remove('show')},2500)}}}
-  function showBuyModal(item){
-    var old=document.getElementById('wbBuyModal');if(old)old.remove();
-    var name=item&&item.name?item.name:'diesem Angebot';
-    var price=item&&item.price!=null?Number(item.price).toLocaleString('de-DE')+' $':'';
-    var modal=document.createElement('div');modal.id='wbBuyModal';modal.className='wb-buy-modal open';
-    modal.innerHTML='<div class="wb-buy-card" role="dialog" aria-modal="true"><div class="wb-buy-head"><h2>Kauf anfragen</h2><button class="wb-buy-close" type="button" aria-label="Schließen">✕</button></div><div class="wb-buy-info">Du möchtest <span class="wb-buy-item">'+esc(name)+'</span>'+ (price?' für <b>'+esc(price)+'</b> kaufen':'')+'.<br><br>Die Abwicklung erfolgt persönlich über unseren Discord. Klicke auf den Button und schreibe dort, dass du dieses Angebot kaufen möchtest.</div><div class="wb-buy-actions"><a class="wb-buy-discord" href="'+DISCORD+'" target="_blank" rel="noopener noreferrer">💬 Auf Discord kaufen</a><button class="wb-buy-cancel" type="button">Abbrechen</button></div></div>';
-    document.body.appendChild(modal);
-    function close(){modal.classList.remove('open');setTimeout(function(){modal.remove()},180)}
-    modal.querySelector('.wb-buy-close').onclick=close;modal.querySelector('.wb-buy-cancel').onclick=close;modal.addEventListener('click',function(e){if(e.target===modal)close()});
+  function fmt(n){ return `${Number(n || 0).toLocaleString('de-DE')} $`; }
+
+  function toast(msg){
+    els.toast.textContent = msg;
+    els.toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => els.toast.classList.remove('show'), 2800);
   }
-  function esc(v){return String(v??'').replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
-  function installBuyButtons(){
-    document.querySelectorAll('.grid .card').forEach(function(card){
-      var btn=[...card.querySelectorAll('button')].find(function(b){return /kaufen/i.test(b.textContent||'')});
-      if(!btn||btn.dataset.wbBuyBound==='1')return;
-      btn.dataset.wbBuyBound='1';
-      var title=card.querySelector('.title');var priceEl=card.querySelector('.price');
-      btn.addEventListener('click',function(e){e.preventDefault();e.stopImmediatePropagation();showBuyModal({name:title?title.textContent.trim():'diesem Angebot',price:priceEl?priceEl.textContent.replace(/[^0-9,.-]/g,'').replace(/\./g,'').replace(',','.'):null})},true);
+
+  // ---------- Supabase (nur Lesen/Insert; Schreiben läuft über /api) ----------
+  async function sbGet(path){
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: SUPABASE_HEADERS, cache: 'no-store' });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  }
+
+  async function loadMarketData(){
+    try{
+      const [listingRows, reviewRows] = await Promise.all([
+        sbGet('listings?select=*&status=in.(approved,sold_out)&order=created_at.desc'),
+        sbGet('reviews?select=*&status=eq.approved&order=created_at.desc')
+      ]);
+      items = listingRows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        type: row.seller === 'WindBank' ? 'item' : 'player',
+        price: Number(row.price),
+        stock: Number(row.stock),
+        seller: row.seller,
+        img: row.image_url || '',
+        status: row.status
+      }));
+      reviews = reviewRows.map((row) => ({
+        id: row.id,
+        name: row.player_name,
+        stars: Number(row.rating),
+        text: row.text
+      }));
+      render();
+    }catch(err){
+      console.warn('WindBank Marktdaten:', err);
+      renderLoadError();
+    }
+  }
+
+  // ---------- Rendering: Marktplatz ----------
+  function render(){
+    const query = els.search.value.trim().toLowerCase();
+    const list = items.filter((it) =>
+      (activeFilter === 'all' || it.type === activeFilter) &&
+      `${it.name} ${it.seller || ''}`.toLowerCase().includes(query)
+    );
+    els.grid.innerHTML = list.length ? list.map(cardHTML).join('') : emptyHTML('Keine passenden Angebote gefunden.');
+    els.offerCount.textContent = items.length;
+    els.stockCount.textContent = items.reduce((sum, it) => sum + Number(it.stock || 0), 0).toLocaleString('de-DE');
+    els.reviewCount.textContent = reviews.length;
+    renderReviews();
+  }
+
+  function cardHTML(it){
+    const soldOut = it.status === 'sold_out' || Number(it.stock) <= 0;
+    const low = !soldOut && Number(it.stock) <= LOW_STOCK_THRESHOLD;
+    const stateClass = soldOut ? 'sold' : low ? 'low' : '';
+    const badgeText = soldOut ? 'Ausverkauft' : low ? 'Wenig Bestand' : 'Verfügbar';
+    return `
+      <article class="card ${stateClass}">
+        <div class="pic">
+          <span class="badge"><span class="dot"></span>${badgeText}</span>
+          <img src="${esc(it.img)}" alt="${esc(it.name)}" loading="lazy"
+               onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">
+          <div class="fallback">▣</div>
+        </div>
+        <div class="body">
+          <div class="title">${esc(it.name)}</div>
+          <div class="meta">${it.type === 'player' ? `von ${esc(it.seller)}` : 'WindBank'}</div>
+          <div class="price">${fmt(it.price)}</div>
+          <div class="stock"><span>Bestand</span><b>${it.stock}</b></div>
+          ${soldOut
+            ? '<button class="btn" disabled>Ausverkauft</button>'
+            : `<button class="btn primary" data-buy="${it.id}">Angebot ansehen</button>`}
+        </div>
+      </article>`;
+  }
+
+  function emptyHTML(message, showRetry){
+    return `<div class="empty${showRetry ? ' error' : ''}">
+      <p>${esc(message)}</p>
+      ${showRetry ? '<button class="btn primary" id="retryLoadBtn" type="button">Erneut versuchen</button>' : ''}
+    </div>`;
+  }
+
+  function renderLoadError(){
+    els.grid.innerHTML = emptyHTML('Angebote konnten gerade nicht geladen werden.', true);
+    $('retryLoadBtn')?.addEventListener('click', loadMarketData);
+  }
+
+  function renderReviews(){
+    els.reviewsGrid.innerHTML = reviews.length ? reviews.map((r) => `
+      <article class="review">
+        <div class="stars">${'★'.repeat(r.stars)}${'☆'.repeat(5 - r.stars)}</div>
+        <p>${esc(r.text)}</p>
+        <small>${esc(r.name)} · <span class="verified">✓ bestätigt</span></small>
+      </article>`).join('') : '<div class="empty">Noch keine Rezensionen.</div>';
+  }
+
+  // ---------- Marktplatz-Interaktion ----------
+  function setFilter(filter, btn){
+    activeFilter = filter;
+    els.tabs.forEach((t) => t.classList.toggle('active', t === btn));
+    render();
+  }
+
+  function openContact({ name, price }){
+    els.contactContent.innerHTML = `
+      <div class="modal-head">
+        <h2>Anfrage über Discord</h2>
+        <button class="icon-btn" type="button" data-close-contact aria-label="Schließen">${ICON_CLOSE}</button>
+      </div>
+      <p class="modal-copy">Du möchtest <strong>${esc(name)}</strong>${price ? ` für <strong>${fmt(price)}</strong>` : ''} anfragen.
+      Die Abwicklung läuft persönlich über unseren Discord — schreib dort einfach, worum es geht.</p>
+      <div class="modal-actions">
+        <a class="btn primary" href="${DISCORD_URL}" target="_blank" rel="noopener noreferrer">${ICON_CHAT} Auf Discord schreiben</a>
+        <button class="btn" type="button" data-close-contact>Abbrechen</button>
+      </div>`;
+    els.contactModal.classList.add('open');
+  }
+  function closeContact(){ els.contactModal.classList.remove('open'); }
+
+  // ---------- Öffentliche Formulare ----------
+  async function apiSubmit(payload){
+    const res = await fetch('/api/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Speichern fehlgeschlagen.');
+    return data;
+  }
+
+  async function handleListingSubmit(e){
+    e.preventDefault();
+    const seller = els.seller.value.trim();
+    const name = els.listingItem.value.trim();
+    const price = Number(els.listingPrice.value);
+    const stock = Number(els.listingStock.value);
+    const image_url = els.listingImg.value.trim();
+    const description = els.listingDesc.value.trim();
+    if (!seller || !name || !Number.isFinite(price) || price < 1 || !Number.isInteger(stock) || stock < 1){
+      toast('Bitte Name, Item, Preis und Stock korrekt ausfüllen.');
+      return;
+    }
+    try{
+      await apiSubmit({ type: 'listing', seller, name, price, stock, image_url, description });
+      toast('✓ Angebot wurde gesendet und wartet auf Freigabe.');
+      els.listingForm.reset();
+    }catch(err){
+      toast(err.message || 'Angebot konnte nicht gespeichert werden.');
+    }
+  }
+
+  async function handleReviewSubmit(e){
+    e.preventDefault();
+    const name = els.reviewName.value.trim();
+    const stars = Number(els.reviewStars.value);
+    const text = els.reviewText.value.trim();
+    if (!name || !text){
+      toast('Bitte Name und Erlebnis eintragen.');
+      return;
+    }
+    try{
+      await apiSubmit({ type: 'review', player_name: name, rating: stars, text });
+      toast('✓ Rezension wurde gesendet und wartet auf Freigabe.');
+      els.reviewForm.reset();
+    }catch(err){
+      toast(err.message || 'Rezension konnte nicht gespeichert werden.');
+    }
+  }
+
+  // ---------- Admin ----------
+  function adminToken(){ return sessionStorage.getItem('wb_admin_token') || ''; }
+
+  async function adminRequest(body){
+    const res = await fetch('/api/admin-db', {
+      method: body ? 'POST' : 'GET',
+      headers: {
+        ...(adminToken() ? { Authorization: `Bearer ${adminToken()}` } : {}),
+        'Content-Type': 'application/json'
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      cache: 'no-store'
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401){
+      sessionStorage.removeItem('wb_admin_token');
+      const err = new Error(data.error || 'Sitzung abgelaufen, bitte erneut einloggen.');
+      err.unauthorized = true;
+      throw err;
+    }
+    if (!res.ok) throw new Error(data.error || 'Admin-Fehler');
+    return data;
+  }
+
+  function handleAdminError(err){
+    if (err.unauthorized) renderAdminLogin();
+    else toast(err.message);
+  }
+
+  function openAdmin(){
+    els.adminModal.classList.add('open');
+    if (adminToken()){
+      els.adminContent.innerHTML = '<p class="section-sub">Admin-Daten werden geladen…</p>';
+      renderAdminDashboard();
+    }else{
+      renderAdminLogin();
+    }
+  }
+  function closeAdmin(){ els.adminModal.classList.remove('open'); }
+
+  function renderAdminLogin(){
+    els.adminContent.innerHTML = `
+      <div class="modal-head">
+        <h2>WindBank Admin</h2>
+        <button class="icon-btn" type="button" data-close-admin aria-label="Schließen">${ICON_CLOSE}</button>
+      </div>
+      <div class="login-pane">
+        <p>Melde dich mit dem Admin-Passwort an.</p>
+        <form id="adminLoginForm" class="field-grid" novalidate>
+          <div class="field full">
+            <label for="adminPass">Passwort</label>
+            <input id="adminPass" type="password" required autocomplete="current-password">
+          </div>
+          <div class="field full"><button class="btn primary" type="submit">Einloggen</button></div>
+        </form>
+        <div id="adminError"></div>
+      </div>`;
+    $('adminLoginForm').addEventListener('submit', handleAdminLogin);
+  }
+
+  async function handleAdminLogin(e){
+    e.preventDefault();
+    const pass = $('adminPass').value;
+    const errBox = $('adminError');
+    const btn = e.target.querySelector('button[type="submit"]');
+    errBox.innerHTML = '';
+    if (!pass){ errBox.innerHTML = '<p class="error-text">Bitte Passwort eingeben.</p>'; return; }
+    btn.disabled = true;
+    try{
+      const res = await fetch('/api/admin-login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pass }), cache: 'no-store'
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Falsches Passwort.');
+      sessionStorage.setItem('wb_admin_token', data.token || '');
+      await renderAdminDashboard();
+    }catch(err){
+      errBox.innerHTML = `<p class="error-text">${esc(err.message)}</p>`;
+    }finally{
+      btn.disabled = false;
+    }
+  }
+
+  async function renderAdminDashboard(){
+    try{
+      const data = await adminRequest();
+      const pending = data.pending || [];
+      const main = data.main || [];
+      const rv = data.reviews || [];
+      els.adminContent.innerHTML = `
+        <div class="modal-head">
+          <h2>WindBank Admin</h2>
+          <button class="icon-btn" type="button" data-close-admin aria-label="Schließen">${ICON_CLOSE}</button>
+        </div>
+        <div class="admin-tabs">
+          <button class="tab active" data-admin-tab="players" type="button">Spieler-Anfragen <b>${pending.length}</b></button>
+          <button class="tab" data-admin-tab="shop" type="button">Shop <b>${main.length}</b></button>
+          <button class="tab" data-admin-tab="reviews" type="button">Rezensionen <b>${rv.length}</b></button>
+        </div>
+        <section class="admin-pane" data-pane="players">
+          <h3>Spieler-Angebote</h3>
+          <div class="admin-list">${pending.length ? pending.map(playerRowHTML).join('') : emptyAdminHTML('Keine offenen Spieler-Anfragen.')}</div>
+        </section>
+        <section class="admin-pane" data-pane="shop" hidden>
+          <h3>Shop-Angebote</h3>
+          <form class="admin-create-form" id="adminCreateForm" novalidate>
+            <input id="newItemName" placeholder="Item-Name" required>
+            <input id="newItemPrice" type="number" min="0" placeholder="Preis in $" required>
+            <input id="newItemStock" type="number" min="0" step="1" placeholder="Stock" required>
+            <input id="newItemImage" placeholder="Bild-URL (optional)">
+            <textarea id="newItemDesc" class="full" placeholder="Beschreibung (optional)"></textarea>
+            <button class="btn primary full" type="submit">＋ Angebot erstellen</button>
+          </form>
+          <div class="admin-list">${main.length ? main.map(shopRowHTML).join('') : emptyAdminHTML('Noch keine Shop-Angebote.')}</div>
+        </section>
+        <section class="admin-pane" data-pane="reviews" hidden>
+          <h3>Rezensionen</h3>
+          <div class="admin-list">${rv.length ? rv.map(reviewRowHTML).join('') : emptyAdminHTML('Keine Rezensionen vorhanden.')}</div>
+        </section>`;
+      bindAdminDashboardEvents();
+    }catch(err){
+      if (err.unauthorized){ renderAdminLogin(); return; }
+      els.adminContent.innerHTML = `
+        <div class="modal-head">
+          <h2>WindBank Admin</h2>
+          <button class="icon-btn" type="button" data-close-admin aria-label="Schließen">${ICON_CLOSE}</button>
+        </div>
+        <p class="error-text">${esc(err.message)}</p>`;
+    }
+  }
+
+  function emptyAdminHTML(msg){ return `<p class="section-sub">${esc(msg)}</p>`; }
+
+  function playerRowHTML(x){
+    return `<div class="admin-item">
+      <div><b>${esc(x.name)}</b><div class="meta">${esc(x.seller)} · ${fmt(x.price)} · Stock ${x.stock}${x.description ? ` · ${esc(x.description)}` : ''}</div></div>
+      <div class="actions">
+        <button class="btn primary" data-admin-action="approve" data-id="${x.id}" type="button">Freigeben</button>
+        <button class="btn" data-admin-action="reject" data-id="${x.id}" type="button">Ablehnen</button>
+        <button class="btn danger" data-admin-action="delete" data-id="${x.id}" type="button">Löschen</button>
+      </div>
+    </div>`;
+  }
+
+  function shopRowHTML(x){
+    const soldOut = x.status === 'sold_out';
+    return `<div class="admin-item">
+      <div><b>${esc(x.name)}</b><div class="meta">${fmt(x.price)} · Stock ${x.stock} · ${soldOut ? 'Ausverkauft' : 'Verfügbar'}</div></div>
+      <div class="actions">
+        <button class="btn" data-admin-action="${soldOut ? 'markAvailable' : 'markSold'}" data-id="${x.id}" type="button">${soldOut ? 'Als verfügbar markieren' : 'Als ausverkauft markieren'}</button>
+        <button class="btn danger" data-admin-action="delete" data-id="${x.id}" type="button">Löschen</button>
+      </div>
+    </div>`;
+  }
+
+  function reviewRowHTML(x){
+    const statusLabel = x.status === 'approved' ? 'Freigegeben' : x.status === 'rejected' ? 'Abgelehnt' : 'Wartet auf Freigabe';
+    return `<div class="admin-item">
+      <div><b>${esc(x.player_name)}</b><div class="meta">${'★'.repeat(Number(x.rating))}${'☆'.repeat(5 - Number(x.rating))} · ${esc(x.text)}</div></div>
+      <div class="actions">
+        <span class="pill">${statusLabel}</span>
+        <button class="btn primary" data-admin-review="approve" data-id="${x.id}" type="button">Freigeben</button>
+        <button class="btn" data-admin-review="reject" data-id="${x.id}" type="button">Ablehnen</button>
+        <button class="btn danger" data-admin-review="delete" data-id="${x.id}" type="button">Löschen</button>
+      </div>
+    </div>`;
+  }
+
+  function bindAdminDashboardEvents(){
+    const tabs = els.adminContent.querySelectorAll('[data-admin-tab]');
+    tabs.forEach((tab) => tab.addEventListener('click', () => {
+      tabs.forEach((t) => t.classList.toggle('active', t === tab));
+      els.adminContent.querySelectorAll('[data-pane]').forEach((pane) => {
+        pane.hidden = pane.dataset.pane !== tab.dataset.adminTab;
+      });
+    }));
+    els.adminContent.querySelectorAll('[data-admin-action]').forEach((btn) => {
+      btn.addEventListener('click', () => handleAdminAction(btn.dataset.adminAction, btn.dataset.id));
+    });
+    els.adminContent.querySelectorAll('[data-admin-review]').forEach((btn) => {
+      btn.addEventListener('click', () => handleAdminReview(btn.dataset.adminReview, btn.dataset.id));
+    });
+    $('adminCreateForm')?.addEventListener('submit', handleAdminCreate);
+  }
+
+  async function handleAdminAction(action, id){
+    if (action === 'delete' && !confirm('Angebot löschen?')) return;
+    try{
+      await adminRequest({ action, id });
+      toast('✓ Erledigt.');
+      await loadMarketData();
+      await renderAdminDashboard();
+    }catch(err){ handleAdminError(err); }
+  }
+
+  async function handleAdminReview(action, id){
+    const map = { approve: 'reviewApprove', reject: 'reviewReject', delete: 'reviewDelete' };
+    if (action === 'delete' && !confirm('Rezension löschen?')) return;
+    try{
+      await adminRequest({ action: map[action], id });
+      toast('✓ Erledigt.');
+      await loadMarketData();
+      await renderAdminDashboard();
+    }catch(err){ handleAdminError(err); }
+  }
+
+  async function handleAdminCreate(e){
+    e.preventDefault();
+    const name = $('newItemName').value.trim();
+    const price = Number($('newItemPrice').value);
+    const stock = Number($('newItemStock').value);
+    const image_url = $('newItemImage').value.trim();
+    const description = $('newItemDesc').value.trim();
+    if (!name || !Number.isFinite(price) || price < 0 || !Number.isInteger(stock) || stock < 0){
+      toast('Bitte Name, Preis und Stock prüfen.');
+      return;
+    }
+    try{
+      await adminRequest({ action: 'createMain', name, price, stock, image_url, description });
+      toast('✓ Shop-Angebot erstellt.');
+      await loadMarketData();
+      await renderAdminDashboard();
+    }catch(err){ handleAdminError(err); }
+  }
+
+  // ---------- Verdrahtung ----------
+  function init(){
+    Object.assign(els, {
+      grid: $('grid'), search: $('searchInput'),
+      tabs: Array.from(document.querySelectorAll('.tab[data-filter]')),
+      offerCount: $('offerCount'), stockCount: $('stockCount'), reviewCount: $('reviewCount'),
+      reviewsGrid: $('reviewsGrid'), toast: $('toast'),
+      listingForm: $('listingForm'), seller: $('seller'), listingItem: $('listingItem'),
+      listingPrice: $('listingPrice'), listingStock: $('listingStock'), listingImg: $('listingImg'), listingDesc: $('listingDesc'),
+      reviewForm: $('reviewForm'), reviewName: $('reviewName'), reviewStars: $('reviewStars'), reviewText: $('reviewText'),
+      contactModal: $('contactModal'), contactContent: $('contactContent'),
+      adminModal: $('adminModal'), adminContent: $('adminContent')
+    });
+
+    els.tabs.forEach((btn) => btn.addEventListener('click', () => setFilter(btn.dataset.filter, btn)));
+    els.search.addEventListener('input', render);
+    els.grid.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-buy]');
+      if (!btn) return;
+      const item = items.find((i) => i.id === btn.dataset.buy);
+      if (item) openContact({ name: item.name, price: item.price });
+    });
+
+    els.listingForm.addEventListener('submit', handleListingSubmit);
+    els.reviewForm.addEventListener('submit', handleReviewSubmit);
+
+    $('loanRequestBtn').addEventListener('click', () => openContact({ name: 'einen WindBank-Kredit', price: null }));
+    $('adminOpenBtn').addEventListener('click', openAdmin);
+
+    els.contactModal.addEventListener('click', (e) => {
+      if (e.target === els.contactModal || e.target.closest('[data-close-contact]')) closeContact();
+    });
+    els.adminModal.addEventListener('click', (e) => {
+      if (e.target === els.adminModal || e.target.closest('[data-close-admin]')) closeAdmin();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      if (els.contactModal.classList.contains('open')) closeContact();
+      if (els.adminModal.classList.contains('open')) closeAdmin();
+    });
+
+    loadMarketData();
+    setInterval(loadMarketData, POLL_INTERVAL_MS);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) loadMarketData();
     });
   }
-  function installPublicForms(){if(typeof window.wbLoad!=='function')return;var oldListing=window.submitListing;if(oldListing&&!oldListing.__wbWrapped){var fn=oldListing;function wrappedListing(){return Promise.resolve(fn.apply(this,arguments)).then(function(r){return Promise.resolve(window.wbLoad()).then(function(){return r})})}wrappedListing.__wbWrapped=true;window.submitListing=wrappedListing}var oldReview=window.submitReview;if(oldReview&&!oldReview.__wbWrapped){var fr=oldReview;function wrappedReview(){return Promise.resolve(fr.apply(this,arguments)).then(function(r){return Promise.resolve(window.wbLoad()).then(function(){return r})})}wrappedReview.__wbWrapped=true;window.submitReview=wrappedReview}if(!window.__wbLoadedOnce){window.__wbLoadedOnce=true;window.wbLoad().catch(function(){})}if(!window.__wbVisibilityBound){window.__wbVisibilityBound=true;document.addEventListener('visibilitychange',function(){if(!document.hidden&&typeof window.wbLoad==='function')window.wbLoad().catch(function(){})})}}
-  function wbNewMainForm(){var host=document.querySelector('#wb-admin-live');if(!host||host.querySelector('.wb-create-form'))return;var wrap=document.createElement('div');wrap.className='wb-create-form';wrap.innerHTML='<div><label class="meta">Item-Name</label><input id="wbNewName" placeholder="z. B. Netherite Ingots"></div><div><label class="meta">Preis in $</label><input id="wbNewPrice" type="number" min="0" placeholder="250000"></div><div><label class="meta">Stock</label><input id="wbNewStock" type="number" min="0" step="1" placeholder="32"></div><div><label class="meta">Bild-URL (optional)</label><input id="wbNewImage" placeholder="https://..."></div><div class="full"><label class="meta">Beschreibung (optional)</label><textarea id="wbNewDesc" placeholder="Beschreibung des Angebots"></textarea></div><div class="wb-create-actions"><button class="btn" type="button" id="wbNewCancel">Abbrechen</button><button class="btn primary" type="button" id="wbNewSave">✓ Angebot erstellen</button></div>';var pane=host.querySelector('[data-pane="shop"]');if(!pane)return;pane.insertBefore(wrap,pane.querySelector('.alist'));wrap.querySelector('#wbNewCancel').onclick=function(){wrap.remove()};wrap.querySelector('#wbNewSave').onclick=async function(){var name=wrap.querySelector('#wbNewName').value.trim(),price=Number(wrap.querySelector('#wbNewPrice').value),stock=Number(wrap.querySelector('#wbNewStock').value),image_url=wrap.querySelector('#wbNewImage').value.trim(),description=wrap.querySelector('#wbNewDesc').value.trim();if(!name||!Number.isFinite(price)||price<0||!Number.isInteger(stock)||stock<0){toastSafe('Bitte Item, Preis und Stock korrekt ausfüllen.');return}try{await window.wbAdminRequest({action:'createMain',name,price,stock,image_url,description});toastSafe('✓ Shop-Angebot erstellt.');wrap.remove();await window.wbLoad();await window.wbRefreshAdmin()}catch(e){toastSafe(e.message||'Angebot konnte nicht erstellt werden.')}};wrap.querySelector('#wbNewName').focus()}
-  function patchAdminCreateButton(){var host=document.querySelector('#wb-admin-live');if(!host)return;var pane=host.querySelector('[data-pane="shop"]');if(!pane)return;var head=pane.querySelector('.panehead');if(!head)return;var create=[...head.querySelectorAll('button')].find(function(b){return /shop-angebot hinzufügen/i.test(b.textContent||'')});if(create&&!create.dataset.wbFormBound){create.dataset.wbFormBound='1';create.textContent='＋ Angebot erstellen';create.onclick=wbNewMainForm}}
-  function patchAdminRefresh(){if(typeof window.wbRefreshAdmin!=='function'||window.wbRefreshAdmin.__wbWrapped)return;var original=window.wbRefreshAdmin;async function wrapped(){var r=await original.apply(this,arguments);setTimeout(patchAdminCreateButton,0);return r}wrapped.__wbWrapped=true;window.wbRefreshAdmin=wrapped}
-  function installAdmin(){patchAdminRefresh();patchAdminCreateButton()}
-  function run(){css();startup();fixTopNav();fixMarketplaceTabs();fixAdmin();cleanupLegacy();fixStartupSound();installPublicForms();installAdmin();installBuyButtons()}
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run);else run();window.addEventListener('load',run);[150,500,1000,1800,3000].forEach(function(ms){setTimeout(run,ms)});if(window.MutationObserver&&document.documentElement){var last=0;new MutationObserver(function(){var now=Date.now();if(now-last<100)return;last=now;fixTopNav();fixMarketplaceTabs();fixAdmin();cleanupLegacy();fixStartupSound();installPublicForms();installAdmin();installBuyButtons()}).observe(document.documentElement,{childList:true,subtree:true})}
+
+  // Skript liegt mit `defer` im HTML — DOM ist beim Ausführen bereits vollständig geparst.
+  init();
 })();
