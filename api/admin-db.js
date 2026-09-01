@@ -1,17 +1,105 @@
-function getSupabase(){return {url:process.env.SUPABASE_URL||'https://laawaphkfqkshftiyqqy.supabase.co',key:process.env.SUPABASE_SECRET_KEY||process.env.SUPABASE_SERVICE_ROLE_KEY}};
-function authorized(req){const token=String(req.headers.authorization||'').replace(/^Bearer\s+/i,'');if(!token)return false;try{const raw=Buffer.from(token,'base64url').toString();const secret=process.env.ADMIN_SESSION_SECRET||process.env.ADMIN_PASSWORD||'';return !!secret&&raw.endsWith(':'+secret)}catch{return false}}
-async function sb(path,options={}){const {url,key}=getSupabase();if(!key)throw new Error('SUPABASE_SECRET_KEY fehlt in Vercel.');const r=await fetch(url+'/rest/v1/'+path,{...options,headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json',...(options.headers||{})}});const text=await r.text();if(!r.ok)throw new Error(text||('Supabase '+r.status));return text?JSON.parse(text):null}
-export default async function handler(req,res){res.setHeader('Cache-Control','no-store');if(!authorized(req))return res.status(401).json({ok:false,error:'Nicht autorisiert.'});try{
- if(req.method==='GET'){
-  const [pending,main,reviews]=await Promise.all([sb('listings?select=*&status=eq.pending&order=created_at.desc'),sb('listings?select=*&status=in.(approved,sold_out)&seller=eq.WindBank&order=created_at.desc'),sb('reviews?select=*&order=created_at.desc')]);
-  return res.status(200).json({ok:true,pending,main,reviews});
- }
- if(req.method!=='POST')return res.status(405).json({ok:false,error:'Method not allowed'});const {action}=req.body||{};
- if(action==='approve'||action==='reject'){const status=action==='approve'?'approved':'rejected';await sb('listings?id=eq.'+encodeURIComponent(req.body.id),{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status})});return res.status(200).json({ok:true});}
- if(action==='delete'||action==='listingDelete'||action==='deletePlayer'||action==='playerDelete'){await sb('listings?id=eq.'+encodeURIComponent(req.body.id),{method:'DELETE',headers:{Prefer:'return=minimal'}});return res.status(200).json({ok:true});}
- if(action==='clearMain'){await sb('listings?seller=eq.WindBank',{method:'DELETE',headers:{Prefer:'return=minimal'}});return res.status(200).json({ok:true});}
- if(action==='reviewApprove'||action==='reviewReject'){const status=action==='reviewApprove'?'approved':'rejected';await sb('reviews?id=eq.'+encodeURIComponent(req.body.id),{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status})});return res.status(200).json({ok:true});}
- if(action==='reviewDelete'){await sb('reviews?id=eq.'+encodeURIComponent(req.body.id),{method:'DELETE',headers:{Prefer:'return=minimal'}});return res.status(200).json({ok:true});}
- if(action==='createMain'){const b=req.body;const row={name:String(b.name||'').trim(),category:'item',price:Number(b.price),stock:Number(b.stock),seller:'WindBank',description:String(b.description||''),image_url:String(b.image_url||''),status:'approved'};if(!row.name||!Number.isFinite(row.price)||row.price<0||!Number.isInteger(row.stock)||row.stock<0)throw new Error('Name, Preis und Stock prüfen.');const created=await sb('listings',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify(row)});return res.status(200).json({ok:true,item:created?.[0]||created});}
- return res.status(400).json({ok:false,error:'Unbekannte Aktion.'});
- }catch(e){return res.status(500).json({ok:false,error:e.message||'Serverfehler'});}}
+function getSupabase(){
+  return {
+    url: process.env.SUPABASE_URL || 'https://laawaphkfqkshftiyqqy.supabase.co',
+    key: process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
+  };
+}
+
+function authorized(req){
+  const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  if (!token) return false;
+  try{
+    const raw = Buffer.from(token, 'base64url').toString();
+    const secret = process.env.ADMIN_SESSION_SECRET || process.env.ADMIN_PASSWORD || '';
+    return !!secret && raw.endsWith(':' + secret);
+  }catch{
+    return false;
+  }
+}
+
+async function sb(path, options = {}){
+  const { url, key } = getSupabase();
+  if (!key) throw new Error('SUPABASE_SECRET_KEY fehlt in Vercel.');
+  const r = await fetch(url + '/rest/v1/' + path, {
+    ...options,
+    headers: { apikey: key, Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', ...(options.headers || {}) }
+  });
+  const text = await r.text();
+  if (!r.ok) throw new Error(text || ('Supabase ' + r.status));
+  return text ? JSON.parse(text) : null;
+}
+
+export default async function handler(req, res){
+  res.setHeader('Cache-Control', 'no-store');
+  if (!authorized(req)) return res.status(401).json({ ok: false, error: 'Nicht autorisiert.' });
+
+  try{
+    if (req.method === 'GET'){
+      const [pending, main, reviews] = await Promise.all([
+        sb('listings?select=*&status=eq.pending&order=created_at.desc'),
+        sb('listings?select=*&status=in.(approved,sold_out)&seller=eq.WindBank&order=created_at.desc'),
+        sb('reviews?select=*&order=created_at.desc')
+      ]);
+      return res.status(200).json({ ok: true, pending, main, reviews });
+    }
+
+    if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
+    const { action } = req.body || {};
+
+    if (action === 'approve' || action === 'reject'){
+      const status = action === 'approve' ? 'approved' : 'rejected';
+      await sb('listings?id=eq.' + encodeURIComponent(req.body.id), { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ status }) });
+      return res.status(200).json({ ok: true });
+    }
+
+    if (action === 'markSold' || action === 'markAvailable'){
+      const status = action === 'markSold' ? 'sold_out' : 'approved';
+      await sb('listings?id=eq.' + encodeURIComponent(req.body.id), { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ status }) });
+      return res.status(200).json({ ok: true });
+    }
+
+    if (action === 'delete' || action === 'listingDelete' || action === 'deletePlayer' || action === 'playerDelete'){
+      await sb('listings?id=eq.' + encodeURIComponent(req.body.id), { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+      return res.status(200).json({ ok: true });
+    }
+
+    if (action === 'clearMain'){
+      await sb('listings?seller=eq.WindBank', { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+      return res.status(200).json({ ok: true });
+    }
+
+    if (action === 'reviewApprove' || action === 'reviewReject'){
+      const status = action === 'reviewApprove' ? 'approved' : 'rejected';
+      await sb('reviews?id=eq.' + encodeURIComponent(req.body.id), { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ status }) });
+      return res.status(200).json({ ok: true });
+    }
+
+    if (action === 'reviewDelete'){
+      await sb('reviews?id=eq.' + encodeURIComponent(req.body.id), { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+      return res.status(200).json({ ok: true });
+    }
+
+    if (action === 'createMain'){
+      const b = req.body;
+      const row = {
+        name: String(b.name || '').trim(),
+        category: 'item',
+        price: Number(b.price),
+        stock: Number(b.stock),
+        seller: 'WindBank',
+        description: String(b.description || ''),
+        image_url: String(b.image_url || ''),
+        status: 'approved'
+      };
+      if (!row.name || !Number.isFinite(row.price) || row.price < 0 || !Number.isInteger(row.stock) || row.stock < 0){
+        throw new Error('Name, Preis und Stock prüfen.');
+      }
+      const created = await sb('listings', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify(row) });
+      return res.status(200).json({ ok: true, item: created?.[0] || created });
+    }
+
+    return res.status(400).json({ ok: false, error: 'Unbekannte Aktion.' });
+  }catch(e){
+    return res.status(500).json({ ok: false, error: e.message || 'Serverfehler' });
+  }
+}
