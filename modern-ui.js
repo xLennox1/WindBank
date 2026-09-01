@@ -106,6 +106,7 @@
     const badgeText = soldOut ? 'Ausverkauft' : low ? 'Wenig Bestand' : 'Verfügbar';
     return `
       <article class="card ${stateClass}">
+        ${adminToken() ? `<button class="icon-btn card-delete" data-delete="${it.id}" type="button" aria-label="Angebot löschen" title="Angebot löschen">${ICON_CLOSE}</button>` : ''}
         <div class="pic">
           <span class="badge"><span class="dot"></span>${badgeText}</span>
           <img src="${esc(it.img)}" alt="${esc(it.name)}" loading="lazy"
@@ -122,6 +123,15 @@
             : `<button class="btn primary" data-buy="${it.id}">Angebot ansehen</button>`}
         </div>
       </article>`;
+  }
+
+  async function deleteListing(id){
+    if (!confirm('Dieses Angebot wirklich löschen?')) return;
+    try{
+      await adminRequest({ action: 'delete', id });
+      toast('✓ Angebot gelöscht.');
+      await loadMarketData();
+    }catch(err){ handleAdminError(err); }
   }
 
   function emptyHTML(message, showRetry){
@@ -462,6 +472,8 @@
     els.tabs.forEach((btn) => btn.addEventListener('click', () => setFilter(btn.dataset.filter, btn)));
     els.search.addEventListener('input', render);
     els.grid.addEventListener('click', (e) => {
+      const delBtn = e.target.closest('[data-delete]');
+      if (delBtn){ deleteListing(delBtn.dataset.delete); return; }
       const btn = e.target.closest('[data-buy]');
       if (!btn) return;
       const item = items.find((i) => i.id === btn.dataset.buy);
