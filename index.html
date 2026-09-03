@@ -14,6 +14,14 @@
 </head>
 <body>
 
+<div class="startup" id="startup" aria-hidden="true">
+  <div class="startup-mark">
+    <svg viewBox="0 0 34 34"><path d="M17 3L31 14L17 31L3 14Z" fill="var(--gold-deep)"/><path d="M17 3L31 14L17 17Z" fill="var(--gold-pale)"/><path d="M3 14L17 17L17 31Z" fill="var(--gold)"/></svg>
+  </div>
+  <div class="startup-panel left"></div>
+  <div class="startup-panel right"></div>
+</div>
+
 <header class="site-header">
   <div class="wrap nav-row">
     <a class="brand" href="#top">
@@ -24,12 +32,13 @@
     </a>
     <nav class="nav-links" aria-label="Hauptnavigation">
       <a href="#shop">Shop</a>
+      <a href="#basenfarmen">Basen/Farmen</a>
       <a href="#kredite">Kredite</a>
       <a href="#verkaufen">Verkaufen</a>
       <a href="#reviews">Rezensionen</a>
       <a class="nav-discord" href="https://discord.gg/dD8rJR7h4A" target="_blank" rel="noopener noreferrer">
         <svg viewBox="0 0 20 20" fill="none"><path d="M3 5.5C3 4.67 3.67 4 4.5 4h11c.83 0 1.5.67 1.5 1.5v6c0 .83-.67 1.5-1.5 1.5H9l-3.5 3v-3H4.5C3.67 13 3 12.33 3 11.5v-6Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
-        Discord
+        <span>Discord</span>
       </a>
     </nav>
     <button class="admin-btn" id="adminOpenBtn" type="button">
@@ -38,6 +47,10 @@
     </button>
   </div>
 </header>
+
+<div class="ticker empty" id="activityTicker" aria-label="Letzte Abschlüsse auf WindBank">
+  <div class="ticker-track" id="tickerTrack"></div>
+</div>
 
 <main>
   <div class="wrap">
@@ -82,6 +95,40 @@
   </div>
 
   <div class="wrap">
+    <section id="basenfarmen" class="section">
+      <div class="section-head">
+        <div>
+          <h2>Basen/Farmen</h2>
+          <p class="section-sub">Stashes und Farmen anfragen oder für andere Spieler übernehmen</p>
+        </div>
+      </div>
+      <div class="discord-notice">
+        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 2 3 5.5v5c0 4.4 3 7.6 7 9 4-1.4 7-4.6 7-9v-5L10 2Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M7.5 10 9 11.5 12.7 8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <p>Um Aufträge anzunehmen oder zu vergeben, musst du Mitglied unseres <a href="https://discord.gg/dD8rJR7h4A" target="_blank" rel="noopener noreferrer">Discord-Servers</a> sein — die eigentliche Abwicklung läuft danach direkt zwischen euch beiden.</p>
+      </div>
+      <div class="base-list" id="baseList"></div>
+      <div class="loan-card">
+        <h3>Auftrag erstellen</h3>
+        <form class="field-grid" id="baseRequestForm" novalidate>
+          <input type="text" name="website" class="hp-field" tabindex="-1" autocomplete="off" aria-hidden="true">
+          <div class="field">
+            <label for="baseKind">Was brauchst du?</label>
+            <select id="baseKind">
+              <option value="base">Base / Stash</option>
+              <option value="farm">Farm</option>
+            </select>
+          </div>
+          <div class="field"><label for="baseRequesterName">Dein Minecraft-Name</label><input id="baseRequesterName" required placeholder="Dein Name"></div>
+          <div class="field full"><label for="baseRequesterDiscord">Dein Discord</label><input id="baseRequesterDiscord" required placeholder="z. B. lennox_wb"></div>
+          <div class="field full"><label for="baseDescription">Beschreibung</label><textarea id="baseDescription" placeholder="Was genau brauchst du? Ort, Größe, Ressourcen etc."></textarea></div>
+          <div class="field full"><button class="btn primary" type="submit">Anfrage zur Prüfung senden</button></div>
+        </form>
+        <p class="listing-note">Auch hier prüft ein Admin jede Anfrage, bevor sie öffentlich sichtbar wird.</p>
+      </div>
+    </section>
+  </div>
+
+  <div class="wrap">
     <section id="kredite" class="section">
       <div class="section-head">
         <div>
@@ -119,15 +166,17 @@
       </div>
       <div class="loan-card">
         <form class="field-grid" id="listingForm" novalidate>
+          <input type="text" name="website" class="hp-field" tabindex="-1" autocomplete="off" aria-hidden="true">
           <div class="field"><label for="seller">Dein Minecraft-Name</label><input id="seller" required placeholder="z. B. xLennox1"></div>
           <div class="field"><label for="listingItem">Item</label><input id="listingItem" required placeholder="z. B. Netherite Ingots"></div>
           <div class="field"><label for="listingPrice">Preis in $</label><input id="listingPrice" type="number" min="1" required placeholder="250000"></div>
           <div class="field"><label for="listingStock">Stock / Anzahl</label><input id="listingStock" type="number" min="1" required placeholder="16"></div>
-          <div class="field full"><label for="listingImg">Bild-URL (optional)</label><input id="listingImg" placeholder="https://…"></div>
+          <div class="field"><label for="listingDiscord">Dein Discord (optional)</label><input id="listingDiscord" placeholder="z. B. lennox_wb"></div>
+          <div class="field"><label for="listingImg">Bild-URL (optional)</label><input id="listingImg" placeholder="https://…"></div>
           <div class="field full"><label for="listingDesc">Beschreibung</label><textarea id="listingDesc" placeholder="Was wird verkauft? Zustand, Stackgröße, Abholung etc."></textarea></div>
           <div class="field full"><button class="btn primary" type="submit">Angebot zur Prüfung senden</button></div>
         </form>
-        <p class="listing-note">Zum Schutz vor Spam werden Spieler-Angebote nicht automatisch veröffentlicht. Ein Admin muss sie freigeben.</p>
+        <p class="listing-note">Zum Schutz vor Spam werden Spieler-Angebote nicht automatisch veröffentlicht. Ein Admin muss sie freigeben. Trägst du deinen Discord-Namen ein, sehen Käufer ihn direkt bei deinem Angebot und können dich persönlich anschreiben. Ohne Angabe läuft die Kontaktaufnahme wie gewohnt über unseren WindBank-Discord.</p>
       </div>
     </section>
   </div>
@@ -144,6 +193,7 @@
       <div class="loan-card review-form-card">
         <h3>Deine Erfahrung</h3>
         <form class="field-grid" id="reviewForm" novalidate>
+          <input type="text" name="website" class="hp-field" tabindex="-1" autocomplete="off" aria-hidden="true">
           <div class="field"><label for="reviewName">Minecraft-Name</label><input id="reviewName" required placeholder="Dein Name"></div>
           <div class="field">
             <label for="reviewStars">Bewertung</label>
@@ -168,11 +218,10 @@
 </footer>
 
 <div class="modal" id="contactModal"><div class="modal-card" id="contactContent"></div></div>
+<div class="modal" id="claimModal"><div class="modal-card" id="claimContent"></div></div>
 <div class="modal" id="adminModal"><div class="modal-card admin-card" id="adminContent"></div></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="modern-ui.js" defer></script>
 </body>
 </html>
-
-
