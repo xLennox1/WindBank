@@ -59,10 +59,28 @@ export default async function handler(req, res){
       return res.status(201).json({ ok: true, review: created?.[0] || created });
     }
 
+    if (type === 'base_request'){
+      const requester_name = String(body.requester_name || '').trim();
+      const requester_discord = String(body.requester_discord || '').trim();
+      const kind = String(body.kind || '').trim();
+      const description = String(body.description || '').trim();
+      if (!requester_name || !requester_discord || !['base', 'farm'].includes(kind)){
+        return res.status(400).json({ ok: false, error: 'Name, Discord und Anfrage-Typ prüfen.' });
+      }
+      const row = {
+        requester_name,
+        requester_discord,
+        kind,
+        description,
+        status: 'open'
+      };
+      const created = await sb('base_requests', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify(row) });
+      return res.status(201).json({ ok: true, request: created?.[0] || created });
+    }
+
     return res.status(400).json({ ok: false, error: 'Unbekannter Anfrage-Typ.' });
   }catch(e){
     console.error('WindBank submit:', e);
     return res.status(500).json({ ok: false, error: e.message || 'Serverfehler' });
   }
 }
-
