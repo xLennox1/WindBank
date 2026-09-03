@@ -24,10 +24,13 @@
 
   const ICON_CLOSE = '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M5 5L15 15M15 5L5 15" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
   const ICON_CHAT = '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 5.5C3 4.67 3.67 4 4.5 4h11c.83 0 1.5.67 1.5 1.5v6c0 .83-.67 1.5-1.5 1.5H9l-3.5 3v-3H4.5C3.67 13 3 12.33 3 11.5v-6Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>';
+  const ICON_COPY = '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="7" y="7" width="9" height="10" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M13 7V5.5A1.5 1.5 0 0 0 11.5 4h-6A1.5 1.5 0 0 0 4 5.5v7A1.5 1.5 0 0 0 5.5 14H7" stroke="currentColor" stroke-width="1.4"/></svg>';
+  const ICON_SHIELD = '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 2 3 5.5v5c0 4.4 3 7.6 7 9 4-1.4 7-4.6 7-9v-5L10 2Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M7.5 10 9 11.5 12.7 8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
   // ---------- Status ----------
   let items = [];
   let reviews = [];
+  let baseRequests = [];
   let activeFilter = 'all';
   let toastTimer = null;
 
@@ -70,7 +73,8 @@
         stock: Number(row.stock),
         seller: row.seller,
         img: row.image_url || '',
-        status: row.status
+        status: row.status,
+        discord: row.discord || ''
       }));
       reviews = reviewRows.map((row) => ({
         id: row.id,
@@ -83,6 +87,45 @@
       console.warn('WindBank Marktdaten:', err);
       renderLoadError();
     }
+  }
+
+  async function loadBaseRequests(){
+    try{
+      const rows = await sbGet('base_requests?select=*&status=eq.open&order=created_at.desc');
+      baseRequests = rows.map((row) => ({
+        id: row.id,
+        kind: row.kind,
+        name: row.requester_name,
+        discord: row.requester_discord,
+        description: row.description || ''
+      }));
+      renderBaseList();
+    }catch(err){
+      console.warn('WindBank Basen/Farmen:', err);
+      els.baseList.innerHTML = emptyHTML('Aufträge konnten gerade nicht geladen werden.');
+    }
+  }
+
+  async function loadActivity(){
+    try{
+      const rows = await sbGet('activity?select=*&order=created_at.desc&limit=15');
+      renderTicker(rows);
+    }catch(err){
+      console.warn('WindBank Aktivität:', err);
+      els.ticker.classList.add('empty');
+    }
+  }
+
+  function renderTicker(rows){
+    if (!rows.length){ els.ticker.classList.add('empty'); return; }
+    els.ticker.classList.remove('empty');
+    const html = rows.map(tickerItemHTML).join('');
+    els.tickerTrack.innerHTML = html + html; // doppelt für eine nahtlose Endlos-Schleife
+  }
+
+  function tickerItemHTML(row){
+    const label = row.kind === 'kredit' ? 'Kredit' : 'Kauf';
+    return `<span class="ticker-item"><span class="dot"></span><b>${esc(row.player_name)}</b> · ${label}${row.note ? ` (${esc(row.note)})` : ''} · <span class="amt">${fmt(row.amount)}</span></span>`;
   }
 
   // ---------- Rendering: Marktplatz ----------
@@ -106,11 +149,9 @@
     const badgeText = soldOut ? 'Ausverkauft' : low ? 'Wenig Bestand' : 'Verfügbar';
     return `
       <article class="card ${stateClass}">
-        ${adminToken() ? `<button class="icon-btn card-delete" data-delete="${it.id}" type="button" aria-label="Angebot löschen" title="Angebot löschen">${ICON_CLOSE}</button>` : ''}
         <div class="pic">
           <span class="badge"><span class="dot"></span>${badgeText}</span>
-          <img src="${esc(it.img)}" alt="${esc(it.name)}" loading="lazy"
-               onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">
+          <img src="${esc(it.img)}" alt="${esc(it.name)}" loading="lazy">
           <div class="fallback">▣</div>
         </div>
         <div class="body">
@@ -123,15 +164,6 @@
             : `<button class="btn primary" data-buy="${it.id}">Angebot ansehen</button>`}
         </div>
       </article>`;
-  }
-
-  async function deleteListing(id){
-    if (!confirm('Dieses Angebot wirklich löschen?')) return;
-    try{
-      await adminRequest({ action: 'delete', id });
-      toast('✓ Angebot gelöscht.');
-      await loadMarketData();
-    }catch(err){ handleAdminError(err); }
   }
 
   function emptyHTML(message, showRetry){
@@ -155,6 +187,23 @@
       </article>`).join('') : '<div class="empty">Noch keine Rezensionen.</div>';
   }
 
+  // ---------- Rendering: Basen/Farmen ----------
+  function renderBaseList(){
+    els.baseList.innerHTML = baseRequests.length
+      ? baseRequests.map(baseCardHTML).join('')
+      : '<div class="empty">Aktuell keine offenen Aufträge.</div>';
+  }
+
+  function baseCardHTML(req){
+    return `
+      <article class="base-card">
+        <span class="pill">${req.kind === 'farm' ? 'Farm' : 'Base / Stash'}</span>
+        <div class="title">${esc(req.name)}</div>
+        <p class="base-desc">${esc(req.description) || 'Keine weitere Beschreibung angegeben.'}</p>
+        <button class="btn primary" data-claim="${req.id}" type="button">Auftrag annehmen</button>
+      </article>`;
+  }
+
   // ---------- Marktplatz-Interaktion ----------
   function setFilter(filter, btn){
     activeFilter = filter;
@@ -162,21 +211,100 @@
     render();
   }
 
-  function openContact({ name, price }){
+  function openContact({ name, price, discord }){
     els.contactContent.innerHTML = `
       <div class="modal-head">
         <h2>Anfrage über Discord</h2>
         <button class="icon-btn" type="button" data-close-contact aria-label="Schließen">${ICON_CLOSE}</button>
       </div>
-      <p class="modal-copy">Du möchtest <strong>${esc(name)}</strong>${price ? ` für <strong>${fmt(price)}</strong>` : ''} anfragen.
-      Die Abwicklung läuft persönlich über unseren Discord — schreib dort einfach, worum es geht.</p>
+      <p class="modal-copy">Du möchtest <strong>${esc(name)}</strong>${price ? ` für <strong>${fmt(price)}</strong>` : ''} anfragen.</p>
+      ${discord ? `
+      <div class="seller-discord">
+        <span class="seller-discord-label">Discord des Verkäufers</span>
+        <div class="seller-discord-row">
+          <code>${esc(discord)}</code>
+          <button class="icon-btn" type="button" data-copy-discord aria-label="Discord-Namen kopieren">${ICON_COPY}</button>
+        </div>
+      </div>
+      <p class="modal-copy small">Schreib diesen Namen direkt auf Discord an. Meldet er sich nicht, kannst du dich alternativ über unseren Server melden:</p>
+      ` : `
+      <p class="modal-copy">Die Abwicklung läuft persönlich über unseren Discord — schreib dort einfach, worum es geht.</p>
+      `}
       <div class="modal-actions">
         <a class="btn primary" href="${DISCORD_URL}" target="_blank" rel="noopener noreferrer">${ICON_CHAT} Auf Discord schreiben</a>
         <button class="btn" type="button" data-close-contact>Abbrechen</button>
       </div>`;
     els.contactModal.classList.add('open');
+    els.contactContent.querySelector('[data-copy-discord]')?.addEventListener('click', () => copyDiscordTag(discord));
   }
   function closeContact(){ els.contactModal.classList.remove('open'); }
+
+  async function copyDiscordTag(tag){
+    try{
+      await navigator.clipboard.writeText(tag);
+      toast('✓ Discord-Name kopiert.');
+    }catch{
+      toast('Kopieren nicht möglich — bitte manuell markieren.');
+    }
+  }
+
+  function openClaim(req){
+    els.claimContent.innerHTML = `
+      <div class="modal-head">
+        <h2>Auftrag annehmen</h2>
+        <button class="icon-btn" type="button" data-close-claim aria-label="Schließen">${ICON_CLOSE}</button>
+      </div>
+      <p class="modal-copy"><strong>${esc(req.name)}</strong> sucht: <strong>${req.kind === 'farm' ? 'eine Farm' : 'eine Base / Stash'}</strong></p>
+      ${req.description ? `<p class="modal-copy small">${esc(req.description)}</p>` : ''}
+      <div class="seller-discord">
+        <span class="seller-discord-label">Discord von ${esc(req.name)}</span>
+        <div class="seller-discord-row">
+          <code>${esc(req.discord)}</code>
+          <button class="icon-btn" type="button" data-copy-discord aria-label="Discord-Namen kopieren">${ICON_COPY}</button>
+        </div>
+      </div>
+      <div class="discord-notice">
+        ${ICON_SHIELD}
+        <p>Du musst Mitglied unseres <a href="${DISCORD_URL}" target="_blank" rel="noopener noreferrer">Discord-Servers</a> sein, um Aufträge anzunehmen. Trag deine Daten ein, um den Auftrag verbindlich zu bestätigen:</p>
+      </div>
+      <form id="claimForm" class="field-grid" novalidate>
+        <input type="text" name="website" class="hp-field" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <div class="field full"><label for="claimName">Dein Minecraft-Name</label><input id="claimName" required placeholder="Dein Name"></div>
+        <div class="field full"><label for="claimDiscord">Dein Discord</label><input id="claimDiscord" required placeholder="z. B. deinname"></div>
+        <div class="field full"><button class="btn primary" type="submit">Auftrag bestätigen</button></div>
+      </form>`;
+    els.claimModal.classList.add('open');
+    els.claimContent.querySelector('[data-copy-discord]')?.addEventListener('click', () => copyDiscordTag(req.discord));
+    $('claimForm').addEventListener('submit', (e) => handleClaimSubmit(e, req.id));
+  }
+  function closeClaim(){ els.claimModal.classList.remove('open'); }
+
+  async function handleClaimSubmit(e, id){
+    e.preventDefault();
+    const helper_name = $('claimName').value.trim();
+    const helper_discord = $('claimDiscord').value.trim();
+    const website = e.target.website.value;
+    if (!helper_name || !helper_discord){
+      toast('Bitte Minecraft-Name und Discord eintragen.');
+      return;
+    }
+    if (!confirm('Auftrag wirklich annehmen? Du gehst damit eine Verpflichtung gegenüber dem Ersteller ein.')) return;
+    try{
+      const res = await fetch('/api/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, helper_name, helper_discord, website })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Auftrag konnte nicht angenommen werden.');
+      toast('✓ Auftrag angenommen — WindBank prüft die Übergabe.');
+      closeClaim();
+      await loadBaseRequests();
+    }catch(err){
+      toast(err.message || 'Auftrag konnte nicht angenommen werden.');
+    }
+  }
+
 
   // ---------- Öffentliche Formulare ----------
   async function apiSubmit(payload){
@@ -196,6 +324,7 @@
     const name = els.listingItem.value.trim();
     const price = Number(els.listingPrice.value);
     const stock = Number(els.listingStock.value);
+    const discord = els.listingDiscord.value.trim();
     const image_url = els.listingImg.value.trim();
     const description = els.listingDesc.value.trim();
     if (!seller || !name || !Number.isFinite(price) || price < 1 || !Number.isInteger(stock) || stock < 1){
@@ -203,7 +332,7 @@
       return;
     }
     try{
-      await apiSubmit({ type: 'listing', seller, name, price, stock, image_url, description });
+      await apiSubmit({ type: 'listing', seller, name, price, stock, discord, image_url, description, website: els.listingForm.website.value });
       toast('✓ Angebot wurde gesendet und wartet auf Freigabe.');
       els.listingForm.reset();
     }catch(err){
@@ -221,11 +350,30 @@
       return;
     }
     try{
-      await apiSubmit({ type: 'review', player_name: name, rating: stars, text });
+      await apiSubmit({ type: 'review', player_name: name, rating: stars, text, website: els.reviewForm.website.value });
       toast('✓ Rezension wurde gesendet und wartet auf Freigabe.');
       els.reviewForm.reset();
     }catch(err){
       toast(err.message || 'Rezension konnte nicht gespeichert werden.');
+    }
+  }
+
+  async function handleBaseRequestSubmit(e){
+    e.preventDefault();
+    const kind = els.baseKind.value;
+    const requester_name = els.baseRequesterName.value.trim();
+    const requester_discord = els.baseRequesterDiscord.value.trim();
+    const description = els.baseDescription.value.trim();
+    if (!requester_name || !requester_discord){
+      toast('Bitte Minecraft-Name und Discord eintragen.');
+      return;
+    }
+    try{
+      await apiSubmit({ type: 'baseRequest', kind, requester_name, requester_discord, description, website: els.baseRequestForm.website.value });
+      toast('✓ Anfrage wurde gesendet und wartet auf Freigabe.');
+      els.baseRequestForm.reset();
+    }catch(err){
+      toast(err.message || 'Anfrage konnte nicht gespeichert werden.');
     }
   }
 
@@ -319,6 +467,9 @@
       const pending = data.pending || [];
       const main = data.main || [];
       const rv = data.reviews || [];
+      const basePending = data.basePending || [];
+      const baseClaimed = data.baseClaimed || [];
+      const activity = data.activity || [];
       els.adminContent.innerHTML = `
         <div class="modal-head">
           <h2>WindBank Admin</h2>
@@ -328,13 +479,18 @@
           <button class="tab active" data-admin-tab="players" type="button">Spieler-Anfragen <b>${pending.length}</b></button>
           <button class="tab" data-admin-tab="shop" type="button">Shop <b>${main.length}</b></button>
           <button class="tab" data-admin-tab="reviews" type="button">Rezensionen <b>${rv.length}</b></button>
+          <button class="tab" data-admin-tab="base" type="button">Basen/Farmen <b>${basePending.length + baseClaimed.length}</b></button>
+          <button class="tab" data-admin-tab="activity" type="button">Aktivität <b>${activity.length}</b></button>
         </div>
         <section class="admin-pane" data-pane="players">
           <h3>Spieler-Angebote</h3>
           <div class="admin-list">${pending.length ? pending.map(playerRowHTML).join('') : emptyAdminHTML('Keine offenen Spieler-Anfragen.')}</div>
         </section>
         <section class="admin-pane" data-pane="shop" hidden>
-          <h3>Shop-Angebote</h3>
+          <div class="pane-head">
+            <h3>Shop-Angebote</h3>
+            ${main.length ? '<button class="btn danger" id="clearShopBtn" type="button">Alle Shop-Angebote löschen</button>' : ''}
+          </div>
           <form class="admin-create-form" id="adminCreateForm" novalidate>
             <input id="newItemName" placeholder="Item-Name" required>
             <input id="newItemPrice" type="number" min="0" placeholder="Preis in $" required>
@@ -348,6 +504,26 @@
         <section class="admin-pane" data-pane="reviews" hidden>
           <h3>Rezensionen</h3>
           <div class="admin-list">${rv.length ? rv.map(reviewRowHTML).join('') : emptyAdminHTML('Keine Rezensionen vorhanden.')}</div>
+        </section>
+        <section class="admin-pane" data-pane="base" hidden>
+          <h3>Neue Anfragen</h3>
+          <div class="admin-list">${basePending.length ? basePending.map(baseRequestRowHTML).join('') : emptyAdminHTML('Keine neuen Basen/Farmen-Anfragen.')}</div>
+          <h3 class="pane-subhead">Angenommene Aufträge — warten auf Bestätigung</h3>
+          <div class="admin-list">${baseClaimed.length ? baseClaimed.map(baseClaimedRowHTML).join('') : emptyAdminHTML('Nichts zur Prüfung.')}</div>
+        </section>
+        <section class="admin-pane" data-pane="activity" hidden>
+          <h3>Aktivitäten-Leiste</h3>
+          <form class="admin-create-form" id="adminActivityForm" novalidate>
+            <input id="activityName" placeholder="Minecraft-Name" required>
+            <select id="activityKind">
+              <option value="kauf">Kauf</option>
+              <option value="kredit">Kredit</option>
+            </select>
+            <input id="activityAmount" type="number" min="0" placeholder="Betrag in $" required>
+            <input id="activityNote" placeholder="Notiz (optional)">
+            <button class="btn primary full" type="submit">＋ Eintrag hinzufügen</button>
+          </form>
+          <div class="admin-list">${activity.length ? activity.map(activityRowHTML).join('') : emptyAdminHTML('Noch keine Einträge.')}</div>
         </section>`;
       bindAdminDashboardEvents();
     }catch(err){
@@ -365,7 +541,7 @@
 
   function playerRowHTML(x){
     return `<div class="admin-item">
-      <div><b>${esc(x.name)}</b><div class="meta">${esc(x.seller)} · ${fmt(x.price)} · Stock ${x.stock}${x.description ? ` · ${esc(x.description)}` : ''}</div></div>
+      <div><b>${esc(x.name)}</b><div class="meta">${esc(x.seller)} · ${fmt(x.price)} · Stock ${x.stock}${x.discord ? ` · Discord: ${esc(x.discord)}` : ''}${x.description ? ` · ${esc(x.description)}` : ''}</div></div>
       <div class="actions">
         <button class="btn primary" data-admin-action="approve" data-id="${x.id}" type="button">Freigeben</button>
         <button class="btn" data-admin-action="reject" data-id="${x.id}" type="button">Ablehnen</button>
@@ -398,6 +574,38 @@
     </div>`;
   }
 
+  function baseRequestRowHTML(x){
+    return `<div class="admin-item">
+      <div><b>${esc(x.requester_name)}</b><div class="meta">${x.kind === 'farm' ? 'Farm' : 'Base / Stash'} · Discord: ${esc(x.requester_discord)}${x.description ? ` · ${esc(x.description)}` : ''}</div></div>
+      <div class="actions">
+        <button class="btn primary" data-admin-action="approveBase" data-id="${x.id}" type="button">Freigeben</button>
+        <button class="btn" data-admin-action="rejectBase" data-id="${x.id}" type="button">Ablehnen</button>
+        <button class="btn danger" data-admin-action="deleteBase" data-id="${x.id}" type="button">Löschen</button>
+      </div>
+    </div>`;
+  }
+
+  function baseClaimedRowHTML(x){
+    return `<div class="admin-item">
+      <div><b>${esc(x.requester_name)}</b> → <b>${esc(x.helper_name)}</b>
+        <div class="meta">${x.kind === 'farm' ? 'Farm' : 'Base / Stash'} · ${esc(x.requester_name)}: ${esc(x.requester_discord)} · ${esc(x.helper_name)}: ${esc(x.helper_discord)}${x.description ? ` · ${esc(x.description)}` : ''}</div>
+      </div>
+      <div class="actions">
+        <button class="btn primary" data-admin-action="matchBase" data-id="${x.id}" type="button">Erneut freigeben</button>
+        <button class="btn danger" data-admin-action="deleteBase" data-id="${x.id}" type="button">Löschen</button>
+      </div>
+    </div>`;
+  }
+
+  function activityRowHTML(x){
+    return `<div class="admin-item">
+      <div><b>${esc(x.player_name)}</b><div class="meta">${x.kind === 'kredit' ? 'Kredit' : 'Kauf'} · ${fmt(x.amount)}${x.note ? ` · ${esc(x.note)}` : ''}</div></div>
+      <div class="actions">
+        <button class="btn danger" data-admin-action="deleteActivity" data-id="${x.id}" type="button">Löschen</button>
+      </div>
+    </div>`;
+  }
+
   function bindAdminDashboardEvents(){
     const tabs = els.adminContent.querySelectorAll('[data-admin-tab]');
     tabs.forEach((tab) => tab.addEventListener('click', () => {
@@ -413,14 +621,27 @@
       btn.addEventListener('click', () => handleAdminReview(btn.dataset.adminReview, btn.dataset.id));
     });
     $('adminCreateForm')?.addEventListener('submit', handleAdminCreate);
+    $('clearShopBtn')?.addEventListener('click', handleClearShop);
+    $('adminActivityForm')?.addEventListener('submit', handleAdminActivityCreate);
   }
 
+  async function handleClearShop(){
+    if (!confirm('Wirklich ALLE Shop-Angebote löschen? Das kann nicht rückgängig gemacht werden.')) return;
+    try{
+      await adminRequest({ action: 'clearMain' });
+      toast('✓ Alle Shop-Angebote gelöscht.');
+      await loadMarketData();
+      await renderAdminDashboard();
+    }catch(err){ handleAdminError(err); }
+  }
+
+  const DESTRUCTIVE_ACTIONS = ['delete', 'deleteBase', 'deleteActivity'];
   async function handleAdminAction(action, id){
-    if (action === 'delete' && !confirm('Angebot löschen?')) return;
+    if (DESTRUCTIVE_ACTIONS.includes(action) && !confirm('Wirklich löschen?')) return;
     try{
       await adminRequest({ action, id });
       toast('✓ Erledigt.');
-      await loadMarketData();
+      await Promise.all([loadMarketData(), loadBaseRequests(), loadActivity()]);
       await renderAdminDashboard();
     }catch(err){ handleAdminError(err); }
   }
@@ -455,6 +676,24 @@
     }catch(err){ handleAdminError(err); }
   }
 
+  async function handleAdminActivityCreate(e){
+    e.preventDefault();
+    const player_name = $('activityName').value.trim();
+    const kind = $('activityKind').value;
+    const amount = Number($('activityAmount').value);
+    const note = $('activityNote').value.trim();
+    if (!player_name || !Number.isFinite(amount) || amount < 0){
+      toast('Bitte Name und Betrag prüfen.');
+      return;
+    }
+    try{
+      await adminRequest({ action: 'addActivity', player_name, kind, amount, note });
+      toast('✓ Eintrag hinzugefügt.');
+      await loadActivity();
+      await renderAdminDashboard();
+    }catch(err){ handleAdminError(err); }
+  }
+
   // ---------- Verdrahtung ----------
   function init(){
     Object.assign(els, {
@@ -464,24 +703,41 @@
       reviewsGrid: $('reviewsGrid'), toast: $('toast'),
       listingForm: $('listingForm'), seller: $('seller'), listingItem: $('listingItem'),
       listingPrice: $('listingPrice'), listingStock: $('listingStock'), listingImg: $('listingImg'), listingDesc: $('listingDesc'),
+      listingDiscord: $('listingDiscord'),
       reviewForm: $('reviewForm'), reviewName: $('reviewName'), reviewStars: $('reviewStars'), reviewText: $('reviewText'),
+      baseList: $('baseList'), baseRequestForm: $('baseRequestForm'), baseKind: $('baseKind'),
+      baseRequesterName: $('baseRequesterName'), baseRequesterDiscord: $('baseRequesterDiscord'), baseDescription: $('baseDescription'),
+      ticker: $('activityTicker'), tickerTrack: $('tickerTrack'),
       contactModal: $('contactModal'), contactContent: $('contactContent'),
+      claimModal: $('claimModal'), claimContent: $('claimContent'),
       adminModal: $('adminModal'), adminContent: $('adminContent')
     });
 
     els.tabs.forEach((btn) => btn.addEventListener('click', () => setFilter(btn.dataset.filter, btn)));
     els.search.addEventListener('input', render);
     els.grid.addEventListener('click', (e) => {
-      const delBtn = e.target.closest('[data-delete]');
-      if (delBtn){ deleteListing(delBtn.dataset.delete); return; }
       const btn = e.target.closest('[data-buy]');
       if (!btn) return;
       const item = items.find((i) => i.id === btn.dataset.buy);
-      if (item) openContact({ name: item.name, price: item.price });
+      if (item) openContact({ name: item.name, price: item.price, discord: item.discord });
     });
+    // 'error' bubbelt bei <img> nicht -- Capture-Phase fängt es trotzdem ab,
+    // ganz ohne Inline-onerror (das würde eine strikte CSP verbieten).
+    els.grid.addEventListener('error', (e) => {
+      if (e.target.tagName !== 'IMG') return;
+      e.target.style.display = 'none';
+      e.target.nextElementSibling?.style.setProperty('display', 'grid');
+    }, true);
 
     els.listingForm.addEventListener('submit', handleListingSubmit);
     els.reviewForm.addEventListener('submit', handleReviewSubmit);
+    els.baseRequestForm.addEventListener('submit', handleBaseRequestSubmit);
+    els.baseList.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-claim]');
+      if (!btn) return;
+      const req = baseRequests.find((r) => r.id === btn.dataset.claim);
+      if (req) openClaim(req);
+    });
 
     $('loanRequestBtn').addEventListener('click', () => openContact({ name: 'einen WindBank-Kredit', price: null }));
     $('adminOpenBtn').addEventListener('click', openAdmin);
@@ -489,20 +745,34 @@
     els.contactModal.addEventListener('click', (e) => {
       if (e.target === els.contactModal || e.target.closest('[data-close-contact]')) closeContact();
     });
+    els.claimModal.addEventListener('click', (e) => {
+      if (e.target === els.claimModal || e.target.closest('[data-close-claim]')) closeClaim();
+    });
     els.adminModal.addEventListener('click', (e) => {
       if (e.target === els.adminModal || e.target.closest('[data-close-admin]')) closeAdmin();
     });
     document.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape') return;
       if (els.contactModal.classList.contains('open')) closeContact();
+      if (els.claimModal.classList.contains('open')) closeClaim();
       if (els.adminModal.classList.contains('open')) closeAdmin();
     });
 
     loadMarketData();
-    setInterval(loadMarketData, POLL_INTERVAL_MS);
+    loadBaseRequests();
+    loadActivity();
+    setInterval(() => { loadMarketData(); loadBaseRequests(); loadActivity(); }, POLL_INTERVAL_MS);
     document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) loadMarketData();
+      if (!document.hidden){ loadMarketData(); loadBaseRequests(); loadActivity(); }
     });
+
+    // Startanimation: einmal abspielen lassen, danach sauber aus dem DOM entfernen.
+    // Blockiert nichts (pointer-events:none) und respektiert reduzierte Bewegung.
+    const startup = $('startup');
+    if (startup){
+      const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      setTimeout(() => startup.remove(), reduceMotion ? 0 : 2000);
+    }
   }
 
   // Skript liegt mit `defer` im HTML — DOM ist beim Ausführen bereits vollständig geparst.
