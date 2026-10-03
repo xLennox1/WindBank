@@ -144,6 +144,7 @@
 
   function cardHTML(it){
     const soldOut = it.status === 'sold_out' || Number(it.stock) <= 0;
+    const image = it.img ? `<img src="${esc(it.img)}" alt="${esc(it.name)}" loading="lazy">` : '';
     const low = !soldOut && Number(it.stock) <= LOW_STOCK_THRESHOLD;
     const stateClass = soldOut ? 'sold' : low ? 'low' : '';
     const badgeText = soldOut ? 'Ausverkauft' : low ? 'Wenig Bestand' : 'Verfügbar';
@@ -151,8 +152,8 @@
       <article class="card ${stateClass}">
         <div class="pic">
           <span class="badge"><span class="dot"></span>${badgeText}</span>
-          <img src="${esc(it.img)}" alt="${esc(it.name)}" loading="lazy">
-          <div class="fallback">▣</div>
+          ${image}
+          <div class="fallback" style="${image ? '' : 'display:grid'}">▣</div>
         </div>
         <div class="body">
           <div class="title">${esc(it.name)}</div>
@@ -694,8 +695,26 @@
     }catch(err){ handleAdminError(err); }
   }
 
+  // ---------- Fehlersicherheit ----------
+  function showStartupError(err){
+    $('startup')?.remove();
+    let box = $('appFatalError');
+    if (!box){
+      box = document.createElement('div');
+      box.id = 'appFatalError';
+      box.style.cssText = 'position:fixed;inset:0;z-index:9999;display:grid;place-items:center;padding:24px;background:#0d0b08;color:#f5f0e4;font-family:Inter,system-ui,sans-serif';
+      document.body.appendChild(box);
+    }
+    box.innerHTML = '<div style="max-width:560px;text-align:center"><h1 style="margin:0 0 12px;font-size:28px">WindBank konnte nicht gestartet werden</h1><p style="color:#a99c82;line-height:1.6">Die Oberfläche ist erreichbar, aber beim Start ist ein Frontend-Fehler aufgetreten.</p><p id="appFatalMessage" style="color:#ff6b5e;font:12px monospace;word-break:break-word;margin-top:18px"></p><button id="appFatalReload" style="margin-top:16px;padding:11px 16px;border:1px solid #e7b23c;background:#e7b23c;color:#241b06;border-radius:10px;font-weight:700;cursor:pointer">Neu laden</button></div>';
+    $('appFatalMessage').textContent = String(err?.message || err || 'Unbekannter Fehler');
+    $('appFatalReload').addEventListener('click', () => location.reload());
+  }
+
   // ---------- Verdrahtung ----------
   function init(){
+    // Sichtbarkeit darf nie von Supabase/API abhängen.
+    $('startup')?.remove();
+
     Object.assign(els, {
       grid: $('grid'), search: $('searchInput'),
       tabs: Array.from(document.querySelectorAll('.tab[data-filter]')),
@@ -758,9 +777,7 @@
       if (els.adminModal.classList.contains('open')) closeAdmin();
     });
 
-    loadMarketData();
-    loadBaseRequests();
-    loadActivity();
+    Promise.allSettled([loadMarketData(), loadBaseRequests(), loadActivity()]);
     setInterval(() => { loadMarketData(); loadBaseRequests(); loadActivity(); }, POLL_INTERVAL_MS);
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden){ loadMarketData(); loadBaseRequests(); loadActivity(); }
@@ -776,5 +793,10 @@
   }
 
   // Skript liegt mit `defer` im HTML — DOM ist beim Ausführen bereits vollständig geparst.
-  init();
+  try {
+    init();
+  } catch (err) {
+    console.error('WindBank Startfehler:', err);
+    showStartupError(err);
+  }
 })();
